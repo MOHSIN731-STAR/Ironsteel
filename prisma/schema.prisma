@@ -1,0 +1,92 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = []
+}
+
+////////////////////////////////////////////////////
+// CUSTOMER MODEL
+////////////////////////////////////////////////////
+
+model Customer {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+
+  orders    Order[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+////////////////////////////////////////////////////
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+// ORDER MODEL
+////////////////////////////////////////////////////
+
+model Order {
+  id            Int         @id @default(autoincrement())
+
+  customerId    Int?
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+
+  customerName  String
+  total         Float
+
+  items         OrderItem[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+
+  orderId    Int
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  name       String
+  price      Float
+  quantity   Int
+  total      Float
+}
+
+////////////////////////////////////////////////////
+// WALKING ORDER MODEL
+////////////////////////////////////////////////////
+
+model Walking {
+  id           Int           @id @default(autoincrement())
+
+  customerName String?
+  total        Float?
+
+  items        WalkingItem[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model WalkingItem {
+  id         Int       @id @default(autoincrement())
+
+  walkingId  Int
+  walking    Walking   @relation(fields: [walkingId], references: [id], onDelete: Cascade)
+
+  name       String?
+  price      Float?
+  quantity   Int?
+  total      Float?
+}
