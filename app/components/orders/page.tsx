@@ -7,6 +7,7 @@ import {
   User,
   ChevronDown,
   ChevronUp,
+  Search,
 } from 'lucide-react';
 
 interface Item {
@@ -14,6 +15,7 @@ interface Item {
   price: number;
   quantity: number;
   total: number;
+  orderDate?: string;        // ← Added
 }
 
 interface Order {
@@ -28,8 +30,11 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [lockedGroupTotals, setLockedGroupTotals] = useState<Record<string, number>>({});
 
   const [formData, setFormData] = useState({
     customerName: '',
@@ -37,9 +42,16 @@ export default function OrdersPage() {
     total: 0,
   });
 
-  const [lockedTotals, setLockedTotals] = useState<Record<string, number>>({});
+  // Load/Save locked totals
+  useEffect(() => {
+    const saved = localStorage.getItem('lockedGroupTotals');
+    if (saved) setLockedGroupTotals(JSON.parse(saved));
+  }, []);
 
-  // ================= FETCH =================
+  useEffect(() => {
+    localStorage.setItem('lockedGroupTotals', JSON.stringify(lockedGroupTotals));
+  }, [lockedGroupTotals]);
+
   const fetchOrders = async () => {
     setLoading(true);
     const res = await fetch('/api/orders', { cache: 'no-store' });
@@ -52,56 +64,58 @@ export default function OrdersPage() {
     fetchOrders();
   }, []);
 
-  // ================= TOGGLE EXPAND =================
-  const toggleExpand = (orderId: string) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [orderId]: !prev[orderId],
-    }));
+  const getGroupKey = (customerName: string) => customerName.toLowerCase().trim();
+
+  // ================= GROUPED ORDERS WITH DATES =================
+  const groupedOrders = Array.from(
+    orders.reduce((map, order) => {
+      const key = getGroupKey(order.customerName);
+      const lockedTotal = lockedGroupTotals[key];
+
+      const itemsWithDate = order.items.map(item => ({
+        ...item,
+        orderDate: order.createdAt,     // Attach date to each item
+      }));
+
+      if (!map.has(key)) {
+        map.set(key, {
+          ...order,
+          id: key,
+          items: itemsWithDate,
+          total: lockedTotal ?? order.total,
+        });
+      } else {
+        const existing = map.get(key)!;
+        existing.items = [...existing.items, ...itemsWithDate];
+
+        if (lockedTotal !== undefined) {
+          existing.total = lockedTotal;
+        } else {
+          existing.total += order.total;
+        }
+      }
+      return map;
+    }, new Map<string, any>()).values()
+  )
+    .filter((group) => group.customerName.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const toggleExpand = (groupKey: string) => {
+    setExpandedOrders((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
-  // ================= GROUP ORDERS =================
-const groupedOrders = Array.from(
-  orders.reduce((map, order) => {
-    const key = order.customerName.toLowerCase();
-
-    const orderTotal = lockedTotals[order.id] ?? order.total;
-
-    if (!map.has(key)) {
-      map.set(key, {
-        ...order,
-        items: [...(order.items || [])],
-        total: orderTotal,
-      });
-    } else {
-      const existing = map.get(key);
-
-      existing.items = [
-        ...existing.items,
-        ...(order.items || []),
-      ];
-
-      // ✅ IMPORTANT FIX: add totals instead of overwrite
-      existing.total =
-        (lockedTotals[existing.id] ?? existing.total) + orderTotal;
-    }
-
-    return map;
-  }, new Map<string, any>()).values()
-);
-
-  // ================= EDIT =================
-  const handleEdit = (order: Order) => {
-    setEditingOrder(order);
+  const handleEdit = (group: any) => {
+    setEditingOrder(group);
     setFormData({
-      customerName: order.customerName,
-      items: order.items,
-      total: order.total,
+      customerName: group.customerName,
+      items: group.items.map((item: Item) => ({ ...item })),
+      total: group.total,
     });
     setShowModal(true);
   };
 
   const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Delete this order?')) return;
     await fetch('/api/orders', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -110,64 +124,35 @@ const groupedOrders = Array.from(
     fetchOrders();
   };
 
-  // ================= ITEM CHANGE =================
   const handleItemChange = (index: number, field: keyof Item, value: any) => {
     const updated = [...formData.items];
-
     updated[index] = {
       ...updated[index],
       [field]: field === 'name' ? value : Number(value),
     };
-
     updated[index].total = updated[index].price * updated[index].quantity;
 
-    const newTotal = updated.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
+    const newTotal = updated.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    setFormData((prev) => ({
-      ...prev,
-      items: updated,
-      total: newTotal,
-    }));
+    setFormData((prev) => ({ ...prev, items: updated, total: newTotal }));
   };
 
-  // ================= DELETE ITEM =================
   const handleDeleteItem = (index: number) => {
     const updated = formData.items.filter((_, i) => i !== index);
-
-    const newTotal = updated.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-
-    setFormData((prev) => ({
-      ...prev,
-      items: updated,
-      total: newTotal,
-    }));
+    const newTotal = updated.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    setFormData((prev) => ({ ...prev, items: updated, total: newTotal }));
   };
 
-  // ================= TOTAL CHANGE =================
   const handleTotalChange = (value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      total: value,
-    }));
-
+    setFormData((prev) => ({ ...prev, total: value }));
     if (editingOrder) {
-      setLockedTotals((prev) => ({
-        ...prev,
-        [editingOrder.id]: value,
-      }));
+      const groupKey = getGroupKey(editingOrder.customerName);
+      setLockedGroupTotals((prev) => ({ ...prev, [groupKey]: value }));
     }
   };
 
-  // ================= UPDATE ORDER =================
   const handleUpdate = async () => {
     if (!editingOrder) return;
-
     await fetch('/api/orders', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -178,79 +163,86 @@ const groupedOrders = Array.from(
         total: formData.total,
       }),
     });
-
     setShowModal(false);
     setEditingOrder(null);
     fetchOrders();
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-100 p-6">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">All Orders</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900">All Orders</h1>
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Search customers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+        </div>
 
         {loading ? (
           <div className="flex justify-center items-center h-96">
-            <div className="w-14 h-14 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="space-y-6">
-            {groupedOrders.map((order: any) => (
-              <div
-                key={order.id}
-                className="bg-white rounded-3xl shadow-lg overflow-hidden"
-              >
-                {/* Clickable Header - Name + Grand Total */}
+            {groupedOrders.map((group: any) => (
+              <div key={group.id} className="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div
-                  onClick={() => toggleExpand(order.id)}
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white flex justify-between items-center cursor-pointer hover:brightness-105 transition-all"
+                  onClick={() => toggleExpand(group.id)}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 p-7 text-white flex justify-between items-center cursor-pointer hover:brightness-105"
                 >
-                  <div className="flex items-center gap-3">
-                    <User size={28} />
+                  <div className="flex items-center gap-4">
+                    <div className="bg-white/20 p-3 rounded-2xl">
+                      <User size={32} />
+                    </div>
                     <div>
-                      <h2 className="text-2xl font-bold">{order.customerName}</h2>
+                      <h2 className="text-3xl font-bold">{group.customerName}</h2>
                       <p className="text-sm opacity-75">
-                        {new Date(order.createdAt).toLocaleDateString()}
+                        {new Date(group.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-8">
                     <div className="text-right">
                       <p className="text-sm opacity-75">Grand Total</p>
-                      <p className="text-4xl font-black">Rs. {order.total}</p>
+                      <p className="text-4xl font-black">Rs. {group.total.toLocaleString()}</p>
                     </div>
-                    {expandedOrders[order.id] ? (
-                      <ChevronUp size={28} />
-                    ) : (
-                      <ChevronDown size={28} />
-                    )}
+                    {expandedOrders[group.id] ? <ChevronUp size={32} /> : <ChevronDown size={32} />}
                   </div>
                 </div>
 
-                {/* Expandable Items Table */}
-                {expandedOrders[order.id] && (
-                  <div className="p-6">
+                {expandedOrders[group.id] && (
+                  <div className="p-8">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-4 px-4 text-gray-600 font-medium">Item Name</th>
-                          <th className="text-right py-4 px-4 text-gray-600 font-medium">Price</th>
-                          <th className="text-center py-4 px-4 text-gray-600 font-medium">Quantity</th>
-                          <th className="text-right py-4 px-4 text-gray-600 font-medium">Total</th>
+                        <tr className="border-b">
+                          <th className="text-left py-4 font-medium text-gray-600 w-40">Date</th>
+                          <th className="text-left py-4 font-medium text-gray-600">Item</th>
+                          <th className="text-right py-4 font-medium text-gray-600">Price</th>
+                          <th className="text-center py-4 font-medium text-gray-600">Qty</th>
+                          <th className="text-right py-4 font-medium text-gray-600">Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {order.items?.map((item: any, i: number) => (
-                          <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                            <td className="py-4 px-4 font-medium">{item.name}</td>
-                            <td className="py-4 px-4 text-right font-semibold">
-                              Rs. {item.price}
+                        {group.items.map((item: any, i: number) => (
+                          <tr key={i} className="border-b hover:bg-slate-50">
+                            <td className="py-5 text-gray-500 text-sm">
+                              {new Date(item.orderDate).toLocaleDateString('en-US', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
                             </td>
-                            <td className="py-4 px-4 text-center font-semibold">
-                              {item.quantity}
-                            </td>
-                            <td className="py-4 px-4 text-right font-black text-green-600">
+                            <td className="py-5 font-medium">{item.name}</td>
+                            <td className="py-5 text-right">Rs. {item.price}</td>
+                            <td className="py-5 text-center">{item.quantity}</td>
+                            <td className="py-5 text-right font-bold text-emerald-600">
                               Rs. {item.total || item.price * item.quantity}
                             </td>
                           </tr>
@@ -258,22 +250,12 @@ const groupedOrders = Array.from(
                       </tbody>
                     </table>
 
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-4 mt-6">
-                      <button
-                        onClick={() => handleEdit(order)}
-                        className="bg-indigo-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition"
-                      >
-                        <Pencil size={18} />
-                        Edit Order
+                    <div className="flex justify-end gap-4 mt-8">
+                      <button onClick={() => handleEdit(group)} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl">
+                        <Pencil size={20} /> Edit Order
                       </button>
-
-                      <button
-                        onClick={() => handleDeleteOrder(order.id)}
-                        className="bg-red-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-red-700 transition"
-                      >
-                        <Trash2 size={18} />
-                        Delete
+                      <button onClick={() => handleDeleteOrder(group.id)} className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl">
+                        <Trash2 size={20} /> Delete
                       </button>
                     </div>
                   </div>
@@ -284,80 +266,86 @@ const groupedOrders = Array.from(
         )}
       </div>
 
-      {/* ================= EDIT MODAL ================= */}
-      {showModal && editingOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-[650px] p-6 rounded-2xl shadow-2xl">
-            <h2 className="text-2xl font-bold mb-5">Update Order</h2>
+      {/* Modal remains same */}
+   {showModal && editingOrder && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-8 border-b">
+              <h2 className="text-3xl font-bold mb-6">Update Order</h2>
+              <input
+                className="border border-gray-300 p-4 w-full rounded-2xl text-lg focus:outline-none focus:border-indigo-500"
+                value={formData.customerName}
+                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                placeholder="Customer Name"
+              />
+            </div>
 
-            <input
-              className="border border-gray-300 p-3 w-full rounded-xl mb-4 focus:outline-none focus:border-indigo-500"
-              value={formData.customerName}
-              onChange={(e) =>
-                setFormData({ ...formData, customerName: e.target.value })
-              }
-              placeholder="Customer Name"
-            />
-
-            {/* Items List */}
-            <div className="max-h-80 overflow-auto border rounded-xl p-4 bg-gray-50 mb-4">
+            <div className="p-8 space-y-4 max-h-[380px] overflow-auto bg-gray-50">
               {formData.items.map((item, index) => (
-                <div key={index} className="grid grid-cols-5 gap-3 items-center mb-3">
-                  <input
-                    className="border p-2 rounded-lg"
-                    value={item.name}
-                    onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                  />
-                  <input
-                    className="border p-2 rounded-lg"
-                    type="number"
-                    value={item.price}
-                    onChange={(e) => handleItemChange(index, 'price', e.target.value)}
-                  />
-                  <input
-                    className="border p-2 rounded-lg"
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                  />
-                  <div className="font-bold text-center">
+                <div key={index} className="bg-white border border-gray-200 rounded-2xl p-5 grid grid-cols-12 gap-4 items-center">
+                  <div className="col-span-5">
+                    <input
+                      className="border border-gray-300 p-3 w-full rounded-xl focus:outline-none focus:border-indigo-400"
+                      value={item.name}
+                      onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400"
+                      value={item.price}
+                      onChange={(e) => handleItemChange(index, 'price', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400"
+                      value={item.quantity}
+                      onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2 text-right font-bold text-lg text-emerald-600">
                     Rs. {item.price * item.quantity}
                   </div>
                   <button
                     onClick={() => handleDeleteItem(index)}
-                    className="text-red-600 hover:text-red-700"
+                    className="col-span-1 text-red-500 hover:text-red-700"
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={24} />
                   </button>
                 </div>
               ))}
             </div>
 
-            {/* Grand Total */}
-            <div className="flex justify-between items-center font-bold text-xl border-t pt-4">
-              <span>Grand Total</span>
-              <input
-                type="number"
-                value={formData.total}
-                onChange={(e) => handleTotalChange(Number(e.target.value))}
-                className="border p-3 w-40 text-right text-2xl text-green-600 rounded-xl focus:outline-none focus:border-green-500"
-              />
+            {/* Grand Total Row */}
+            <div className=" border-t border-b bg-white">
+              <div className="flex justify-between items-center bg-gray-50 rounded-2xl p-2">
+                <span className="text-2xl font-semibold text-gray-700">Grand Total</span>
+                <input
+                  type="number"
+                  value={formData.total}
+                  onChange={(e) => handleTotalChange(Number(e.target.value))}
+                  className="text-5xl font-black text-emerald-600 text-right bg-transparent focus:outline-none w-52"
+                />
+              </div>
             </div>
 
-            {/* Modal Buttons */}
-            <div className="flex justify-end gap-3 mt-6">
+            {/* Buttons */}
+            <div className="p-2 mb-24 flex justify-end gap-4 bg-gray-50 rounded-b-3xl">
               <button
                 onClick={() => {
                   setShowModal(false);
                   setEditingOrder(null);
                 }}
-                className="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-100"
+                className="px-8 py-3 border border-gray-300 rounded-2xl hover:bg-gray-100 font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUpdate}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+                className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl hover:brightness-105 font-medium"
               >
                 Update Order
               </button>

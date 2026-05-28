@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useCart } from "./../context/CartContext";
 import Image from "next/image";
+import Link from "next/link";
 
 type PriceMap = Record<number, number>;
 
@@ -128,6 +129,7 @@ export default function Cart() {
     return (
       <div className="text-center py-20">
         <h1 className="text-3xl font-bold">Cart Empty</h1>
+        <Link href="/" className="text-3xl font-bold hover:text-blue-500 hover:underline">Products</Link>
       </div>
     );
   }
@@ -161,7 +163,7 @@ export default function Cart() {
                   <h3 className="text-xl font-bold">
                     {item.name}
                   </h3>
-
+                  <span>Price</span>
                   {/* PRICE INPUT */}
                   <input
                     type="number"
@@ -180,6 +182,7 @@ export default function Cart() {
                   </p>
 
                   <div className="flex gap-4 mt-3">
+                    <span>Kg/Qty</span>
                     <input
                       type="number"
                       value={item.quantity}
@@ -281,7 +284,7 @@ export default function Cart() {
             <div className="space-y-2">
               <div className="grid grid-cols-3 font-bold border-b pb-2">
                 <span>Item</span>
-                <span className="text-center">Qty</span>
+                <span className="text-center">Qty/Kg</span>
                 <span className="text-right">Price</span>
               </div>
 
@@ -353,28 +356,49 @@ export default function Cart() {
     </h2>
 
     <div className="text-center mb-3">
-      <p>Customer: {customerName}</p>
+   <div className="text-center mb-3">
+  <p>Customer: {customerName}</p>
+  <p>
+    Date:{" "}
+    {new Date().toLocaleDateString("en-GB", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    })}
+  </p>
+</div>
     </div>
 
-    <div className="border-t border-b py-2 font-bold flex justify-between">
-      <span>Item</span>
-      <span>Total</span>
-    </div>
+    {/* Header */}
+<div className="border-t border-b px-1 py-2 font-bold flex">
+  <span className="w-1/4">Item</span>
+  <span className="w-1/4 text-right">Price</span>
+  <span className="w-1/4 text-right">Qty/Kg</span>
+  <span className="w-1/4 text-right">Total</span>
+</div>
 
-    {cart.map((item) => (
-      <div
-        key={item.id}
-        className="flex justify-between py-1 border-b"
-      >
-        <span className="w-1/2">{item.name}</span>
+{/* Rows */}
+{cart.map((item) => (
+  <div
+    key={item.id}
+    className="flex py-1 border-b px-2"
+  >
+    <span className="w-1/4">{item.name}</span>
 
-        <span className="text-right w-1/2">
-          {getPrice(item)} x {item.quantity} ={" "}
-          {getPrice(item) * item.quantity}
-        </span>
-      </div>
-    ))}
+    <span className="w-1/4 text-right">
+      {getPrice(item)}
+    </span>
 
+    <span className="w-1/4 text-right">
+      {item.quantity}
+    </span>
+
+    <span className="w-1/4 text-right">
+      {getPrice(item) * item.quantity}
+    </span>
+  </div>
+))}
     <div className="flex justify-between font-bold mt-3 pt-2 ">
       <span>Total</span>
       <span>

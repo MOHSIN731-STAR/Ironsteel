@@ -1,6 +1,14 @@
 import "./globals.css";
 import { CartProvider } from "./context/CartContext";
 import Navbar from "./components/Navbar";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Iron Store",
+  icons: {
+    icon: "/bismallah.webp",
+  },
+};
 
 export default function RootLayout({
   children,

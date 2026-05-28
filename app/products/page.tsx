@@ -15,6 +15,10 @@ const products: Product[] = [
   { id: 7, name: "ٹائل فٹ والی", image:"/ٹائل فٹ والی.png" },
   { id: 8, name: "سپریم سریا", image:"/سپریم سریا.png" },
   { id: 9, name: "MOIZ سریا", image:"/سپریم سریا.png" },
+  { id: 10, name: "تار", image:"/tar.png" },
+  { id: 11, name: "پانی پائپ", image:"/water_pipe.jpeg" },
+  { id: 12, name: "بالٹی", image:"/bati.jpeg" },
+  { id: 13, name: "ڈبہ", image:"/daba.jpeg" },
 
 ];
 
