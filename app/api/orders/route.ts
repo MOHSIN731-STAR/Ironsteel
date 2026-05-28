@@ -77,6 +77,8 @@ export async function GET() {
       include: {
         items: true,
       },
+      take: 50,           // ← Add this (limit results)
+      // skip: 0,         // for pagination later
     });
 
     const formattedOrders = orders.map((order: any) => ({
@@ -91,14 +93,46 @@ export async function GET() {
       success: true,
       orders: formattedOrders,
     });
-  } catch (error) {
-    console.log(error);
-
+  } catch (error: any) {
+    console.error("Orders API Error:", error);
     return Response.json({
       success: false,
-    });
+      message: error.message,
+      code: error.code,
+    }, { status: 500 });
   }
 }
+// export async function GET() {
+//   try {
+//     const orders = await prisma.order.findMany({
+//       orderBy: {
+//         createdAt: "desc",
+//       },
+//       include: {
+//         items: true,
+//       },
+//     });
+
+//     const formattedOrders = orders.map((order: any) => ({
+//       ...order,
+//       items: order.items.map((item: any) => ({
+//         ...item,
+//         createdAt: item.createdAt || order.createdAt,
+//       })),
+//     }));
+
+//     return Response.json({
+//       success: true,
+//       orders: formattedOrders,
+//     });
+//   } catch (error) {
+//     console.log(error);
+
+//     return Response.json({
+//       success: false,
+//     });
+//   }
+// }
 
 export async function PUT(req:NextRequest) {
   try {
