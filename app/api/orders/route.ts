@@ -190,45 +190,60 @@ export async function PUT(req: NextRequest) {
 // ================= FIXED DELETE =================
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.json();           // ← Ab body se le rahe hain
-    const { orderId } = body;
+    const body = await req.json();
 
-    if (!orderId) {
+    const { customerName } = body;
+
+    if (!customerName) {
       return NextResponse.json(
-        { success: false, message: 'Order ID is required' },
+        {
+          success: false,
+          message: 'Customer name required',
+        },
         { status: 400 }
       );
     }
 
-    const id = Number(orderId);
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid Order ID' },
-        { status: 400 }
-      );
-    }
-
-    // Optional: Check if order exists
-    const existingOrder = await prisma.order.findUnique({ where: { id } });
-    if (!existingOrder) {
-      return NextResponse.json(
-        { success: false, message: 'Order not found' },
-        { status: 404 }
-      );
-    }
-
-    await prisma.order.delete({
-      where: { id },
+    // Find all orders of customer
+    const orders = await prisma.order.findMany({
+      where: {
+        customerName: customerName,
+      },
+      select: {
+        id: true,
+      },
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Order deleted successfully' 
+    const orderIds = orders.map((o) => o.id);
+
+    // Delete all items first
+    await prisma.orderItem.deleteMany({
+      where: {
+        orderId: {
+          in: orderIds,
+        },
+      },
+    });
+
+    // Delete all orders
+    await prisma.order.deleteMany({
+      where: {
+        customerName: customerName,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'All customer orders deleted',
     });
   } catch (error: any) {
-    console.error('DELETE Error:', error);
+    console.error(error);
+
     return NextResponse.json(
-      { success: false, message: 'Failed to delete order' },
+      {
+        success: false,
+        message: error.message,
+      },
       { status: 500 }
     );
   }
