@@ -13,7 +13,7 @@ export default function Navbar(): JSX.Element {
     <nav className="bg-blue-700 text-white p-3 sticky top-0 z-10 shadow-lg">
       <div className="container mx-auto flex justify-between items-center">
         <Link href="/" className="text-lg font-bold">
-          Bismillah Iron and Steel Store
+          Bismillah
         </Link>
         <Link href="/components/stationery" className="hover:text-shadow-blue-400">
           Stationary

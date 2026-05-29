@@ -15,11 +15,11 @@ interface Item {
   price: number;
   quantity: number;
   total: number;
-  orderDate?: string;        // ← Added
+  orderDate?: string;
 }
 
 interface Order {
-  id: string;
+  id: number;
   customerName: string;
   items: Item[];
   total: number;
@@ -54,9 +54,13 @@ export default function OrdersPage() {
 
   const fetchOrders = async () => {
     setLoading(true);
-    const res = await fetch('/api/orders', { cache: 'no-store' });
-    const data = await res.json();
-    if (data.success) setOrders(data.orders || []);
+    try {
+      const res = await fetch('/api/orders', { cache: 'no-store' });
+      const data = await res.json();
+      if (data.success) setOrders(data.orders || []);
+    } catch (error) {
+      console.error(error);
+    }
     setLoading(false);
   };
 
@@ -66,7 +70,7 @@ export default function OrdersPage() {
 
   const getGroupKey = (customerName: string) => customerName.toLowerCase().trim();
 
-  // ================= GROUPED ORDERS WITH DATES =================
+  // ================= GROUPED ORDERS =================
   const groupedOrders = Array.from(
     orders.reduce((map, order) => {
       const key = getGroupKey(order.customerName);
@@ -74,19 +78,22 @@ export default function OrdersPage() {
 
       const itemsWithDate = order.items.map(item => ({
         ...item,
-        orderDate: order.createdAt,     // Attach date to each item
+        orderDate: order.createdAt,
       }));
 
       if (!map.has(key)) {
         map.set(key, {
           ...order,
-          id: key,
+          id: order.id,
+          groupKey: key,
           items: itemsWithDate,
           total: lockedTotal ?? order.total,
+          allOrderIds: [order.id]   // ← Important: Track all order IDs
         });
       } else {
         const existing = map.get(key)!;
         existing.items = [...existing.items, ...itemsWithDate];
+        existing.allOrderIds.push(order.id);
 
         if (lockedTotal !== undefined) {
           existing.total = lockedTotal;
@@ -105,25 +112,44 @@ export default function OrdersPage() {
   };
 
   const handleEdit = (group: any) => {
+    const cleanItems = group.items.map((item: any) => ({
+      name: item.name,
+      price: Number(item.price),
+      quantity: Number(item.quantity),
+      total: Number(item.price) * Number(item.quantity),
+    }));
+
     setEditingOrder(group);
     setFormData({
       customerName: group.customerName,
-      items: group.items.map((item: Item) => ({ ...item })),
+      items: cleanItems,
       total: group.total,
     });
     setShowModal(true);
   };
 
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!confirm('Delete this order?')) return;
-    await fetch('/api/orders', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId }),
-    });
-    fetchOrders();
+  // ================= DELETE ENTIRE GROUP =================
+  const handleDeleteOrder = async (group: any) => {
+    if (!confirm(`Delete all orders for ${group.customerName}?`)) return;
+
+    try {
+      // Delete all orders for this customer
+      for (const orderId of group.allOrderIds) {
+        await fetch('/api/orders', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        });
+      }
+
+      fetchOrders(); // Refresh list
+    } catch (error) {
+      console.error(error);
+      alert('Delete failed');
+    }
   };
 
+  // ================= Modal Functions =================
   const handleItemChange = (index: number, field: keyof Item, value: any) => {
     const updated = [...formData.items];
     updated[index] = {
@@ -138,9 +164,11 @@ export default function OrdersPage() {
   };
 
   const handleDeleteItem = (index: number) => {
-    const updated = formData.items.filter((_, i) => i !== index);
-    const newTotal = updated.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    setFormData((prev) => ({ ...prev, items: updated, total: newTotal }));
+    setFormData((prev) => {
+      const updatedItems = prev.items.filter((_, i) => i !== index);
+      const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity || 0), 0);
+      return { ...prev, items: updatedItems, total: newTotal };
+    });
   };
 
   const handleTotalChange = (value: number) => {
@@ -153,6 +181,7 @@ export default function OrdersPage() {
 
   const handleUpdate = async () => {
     if (!editingOrder) return;
+
     await fetch('/api/orders', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -163,6 +192,7 @@ export default function OrdersPage() {
         total: formData.total,
       }),
     });
+
     setShowModal(false);
     setEditingOrder(null);
     fetchOrders();
@@ -192,9 +222,9 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-6">
             {groupedOrders.map((group: any) => (
-              <div key={group.id} className="bg-white rounded-3xl shadow-xl overflow-hidden">
+              <div key={group.groupKey} className="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div
-                  onClick={() => toggleExpand(group.id)}
+                  onClick={() => toggleExpand(group.groupKey)}
                   className="bg-gradient-to-r from-indigo-600 to-purple-600 p-7 text-white flex justify-between items-center cursor-pointer hover:brightness-105"
                 >
                   <div className="flex items-center gap-4">
@@ -204,7 +234,9 @@ export default function OrdersPage() {
                     <div>
                       <h2 className="text-3xl font-bold">{group.customerName}</h2>
                       <p className="text-sm opacity-75">
-                        {new Date(group.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                        {new Date(group.createdAt).toLocaleDateString('en-US', { 
+                          weekday: 'long', month: 'long', day: 'numeric' 
+                        })}
                       </p>
                     </div>
                   </div>
@@ -213,11 +245,11 @@ export default function OrdersPage() {
                       <p className="text-sm opacity-75">Grand Total</p>
                       <p className="text-4xl font-black">Rs. {group.total.toLocaleString()}</p>
                     </div>
-                    {expandedOrders[group.id] ? <ChevronUp size={32} /> : <ChevronDown size={32} />}
+                    {expandedOrders[group.groupKey] ? <ChevronUp size={32} /> : <ChevronDown size={32} />}
                   </div>
                 </div>
 
-                {expandedOrders[group.id] && (
+                {expandedOrders[group.groupKey] && (
                   <div className="p-8">
                     <table className="w-full">
                       <thead>
@@ -234,9 +266,7 @@ export default function OrdersPage() {
                           <tr key={i} className="border-b hover:bg-slate-50">
                             <td className="py-5 text-gray-500 text-sm">
                               {new Date(item.orderDate).toLocaleDateString('en-US', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
+                                day: 'numeric', month: 'short', year: 'numeric'
                               })}
                             </td>
                             <td className="py-5 font-medium">{item.name}</td>
@@ -251,11 +281,17 @@ export default function OrdersPage() {
                     </table>
 
                     <div className="flex justify-end gap-4 mt-8">
-                      <button onClick={() => handleEdit(group)} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl">
+                      <button 
+                        onClick={() => handleEdit(group)} 
+                        className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl transition-all"
+                      >
                         <Pencil size={20} /> Edit Order
                       </button>
-                      <button onClick={() => handleDeleteOrder(group.id)} className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl">
-                        <Trash2 size={20} /> Delete
+                      <button 
+                        onClick={() => handleDeleteOrder(group)} 
+                        className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl transition-all"
+                      >
+                        <Trash2 size={20} /> Delete All
                       </button>
                     </div>
                   </div>
@@ -266,8 +302,8 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {/* Modal remains same */}
-   {showModal && editingOrder && (
+      {/* Modal Code (same as before) */}
+      {showModal && editingOrder && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-8 border-b">
@@ -282,71 +318,38 @@ export default function OrdersPage() {
 
             <div className="p-8 space-y-4 max-h-[380px] overflow-auto bg-gray-50">
               {formData.items.map((item, index) => (
-                <div key={index} className="bg-white border border-gray-200 rounded-2xl p-5 grid grid-cols-12 gap-4 items-center">
+                <div key={`${item.name}-${index}`} className="bg-white border border-gray-200 rounded-2xl p-5 grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-5">
-                    <input
-                      className="border border-gray-300 p-3 w-full rounded-xl focus:outline-none focus:border-indigo-400"
-                      value={item.name}
-                      onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                    />
+                    <input className="border border-gray-300 p-3 w-full rounded-xl focus:outline-none focus:border-indigo-400" value={item.name} onChange={(e) => handleItemChange(index, 'name', e.target.value)} />
                   </div>
                   <div className="col-span-2">
-                    <input
-                      type="number"
-                      className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400"
-                      value={item.price}
-                      onChange={(e) => handleItemChange(index, 'price', e.target.value)}
-                    />
+                    <input type="number" className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400" value={item.price} onChange={(e) => handleItemChange(index, 'price', e.target.value)} />
                   </div>
                   <div className="col-span-2">
-                    <input
-                      type="number"
-                      className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400"
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                    />
+                    <input type="number" className="border border-gray-300 p-3 w-full rounded-xl text-center focus:outline-none focus:border-indigo-400" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} />
                   </div>
                   <div className="col-span-2 text-right font-bold text-lg text-emerald-600">
                     Rs. {item.price * item.quantity}
                   </div>
-                  <button
-                    onClick={() => handleDeleteItem(index)}
-                    className="col-span-1 text-red-500 hover:text-red-700"
-                  >
+                  <button onClick={() => handleDeleteItem(index)} className="col-span-1 text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl transition-all">
                     <Trash2 size={24} />
                   </button>
                 </div>
               ))}
             </div>
 
-            {/* Grand Total Row */}
-            <div className=" border-t border-b bg-white">
+            <div className="border-t border-b bg-white">
               <div className="flex justify-between items-center bg-gray-50 rounded-2xl p-2">
                 <span className="text-2xl font-semibold text-gray-700">Grand Total</span>
-                <input
-                  type="number"
-                  value={formData.total}
-                  onChange={(e) => handleTotalChange(Number(e.target.value))}
-                  className="text-5xl font-black text-emerald-600 text-right bg-transparent focus:outline-none w-52"
-                />
+                <input type="number" value={formData.total} onChange={(e) => handleTotalChange(Number(e.target.value))} className="text-5xl font-black text-emerald-600 text-right bg-transparent focus:outline-none w-52" />
               </div>
             </div>
 
-            {/* Buttons */}
-            <div className="p-2 mb-24 flex justify-end gap-4 bg-gray-50 rounded-b-3xl">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingOrder(null);
-                }}
-                className="px-8 py-3 border border-gray-300 rounded-2xl hover:bg-gray-100 font-medium"
-              >
+            <div className="p-8 flex justify-end gap-4 bg-gray-50 rounded-b-3xl">
+              <button onClick={() => { setShowModal(false); setEditingOrder(null); }} className="px-8 py-3 border border-gray-300 rounded-2xl hover:bg-gray-100 font-medium">
                 Cancel
               </button>
-              <button
-                onClick={handleUpdate}
-                className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl hover:brightness-105 font-medium"
-              >
+              <button onClick={handleUpdate} className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl hover:brightness-105 font-medium">
                 Update Order
               </button>
             </div>

@@ -134,30 +134,29 @@ export async function GET() {
 //   }
 // }
 
-export async function PUT(req:NextRequest) {
+// app/api/orders/route.ts  (ya jahan bhi aapka route hai)
+
+export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, customerName, items, total } = body;   // ← total bhi receive karo
+    const { orderId, customerName, items, total } = body;
 
     const id = Number(orderId);
     if (!id) {
       return NextResponse.json({ success: false, message: "Order ID is required" }, { status: 400 });
     }
 
-    // Format items
     const formattedItems = (items || []).map((item: any) => {
       const price = Number(item.price) || 0;
       const quantity = Number(item.quantity) || 0;
-
       return {
-        name: item.name,
+        name: item.name?.trim(),
         price,
         quantity,
         total: price * quantity,
       };
     });
 
-    // ✅ IMPORTANT: Frontend se aaya total use karo, warna items se calculate karo
     const finalTotal = Number(total) || 
       formattedItems.reduce((sum: number, item: any) => sum + item.total, 0);
 
@@ -166,12 +165,11 @@ export async function PUT(req:NextRequest) {
       where: { orderId: id },
     });
 
-    // Update order
     const updatedOrder = await prisma.order.update({
       where: { id },
       data: {
         customerName,
-        total: finalTotal,           // ← Yahan frontend ka total save ho raha hai
+        total: finalTotal,
         items: {
           create: formattedItems,
         },
@@ -184,41 +182,53 @@ export async function PUT(req:NextRequest) {
       order: updatedOrder,
     });
   } catch (error: any) {
-    console.error(error);
+    console.error('PUT Error:', error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
+
+// ================= FIXED DELETE =================
 export async function DELETE(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    let orderId = searchParams.get("id");
-
-    if (!orderId) {
-      try {
-        const body = await req.json();
-        orderId = body.orderId || body.id;
-      } catch {}
-    }
+    const body = await req.json();           // ← Ab body se le rahe hain
+    const { orderId } = body;
 
     if (!orderId) {
       return NextResponse.json(
-        { success: false, message: "Order ID is required" },
+        { success: false, message: 'Order ID is required' },
         { status: 400 }
       );
     }
 
+    const id = Number(orderId);
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid Order ID' },
+        { status: 400 }
+      );
+    }
+
+    // Optional: Check if order exists
+    const existingOrder = await prisma.order.findUnique({ where: { id } });
+    if (!existingOrder) {
+      return NextResponse.json(
+        { success: false, message: 'Order not found' },
+        { status: 404 }
+      );
+    }
+
     await prisma.order.delete({
-      where: { id: Number(orderId) },   // Make sure it's number
+      where: { id },
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Order deleted successfully",
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Order deleted successfully' 
     });
   } catch (error: any) {
-    console.error("DELETE Error:", error);
+    console.error('DELETE Error:', error);
     return NextResponse.json(
-      { success: false, message: "Error deleting order" },
+      { success: false, message: 'Failed to delete order' },
       { status: 500 }
     );
   }
