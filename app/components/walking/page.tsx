@@ -164,6 +164,50 @@ const handleUpdate = async () => {
     alert('Update request failed');
   }
 };
+const deleteTooltipItem = async (index: number) => {
+  if (!hoveredOrder) return;
+
+  const updatedItems = hoveredOrder.items.filter(
+    (_, i) => i !== index
+  );
+
+  const updatedTotal = updatedItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  try {
+    const res = await fetch('/api/walking', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        orderId: hoveredOrder.id,
+        customerName: hoveredOrder.customerName,
+        items: updatedItems,
+        total: updatedTotal,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      setHoveredOrder({
+        ...hoveredOrder,
+        items: updatedItems,
+        total: updatedTotal,
+      });
+
+      fetchOrders();
+    } else {
+      alert(data.error || 'Delete failed');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Something went wrong');
+  }
+};
 
   // ================= HOVER TOOLTIP =================
   const handleEnter = (order: WalkingOrder) => {
@@ -292,15 +336,32 @@ const handleUpdate = async () => {
               </button>
               <h2 className="font-bold text-xl mb-4">Order Items</h2>
               <div className="space-y-3 max-h-64 overflow-auto">
-                {hoveredOrder.items.map((item, i) => (
-                  <div key={i} className="flex justify-between border-b pb-2">
-                    <div>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-xs text-gray-500">{item.quantity} × Rs. {item.price}</div>
-                    </div>
-                    <div className="font-semibold">Rs. {item.quantity * item.price}</div>
-                  </div>
-                ))}
+               {hoveredOrder.items.map((item, i) => (
+  <div
+    key={i}
+    className="flex justify-between items-center border-b pb-2"
+  >
+    <div>
+      <div className="font-medium">{item.name}</div>
+      <div className="text-xs text-gray-500">
+        {item.quantity} × Rs. {item.price}
+      </div>
+    </div>
+
+    <div className="flex items-center gap-3">
+      <div className="font-semibold">
+        Rs. {item.quantity * item.price}
+      </div>
+
+      <button
+        onClick={() => deleteTooltipItem(i)}
+        className="text-red-600 hover:text-red-800"
+      >
+        <Trash2 size={16} />
+      </button>
+    </div>
+  </div>
+))}
               </div>
               <div className="mt-5 pt-3 border-t flex justify-between font-bold text-lg">
                 <span>Grand Total</span>
