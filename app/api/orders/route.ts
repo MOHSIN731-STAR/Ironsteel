@@ -141,16 +141,15 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { orderId, customerName, items, total } = body;
 
-    const id = Number(orderId);
-    if (!id) {
-      return NextResponse.json({ success: false, message: "Order ID is required" }, { status: 400 });
+    if (!customerName) {
+      return NextResponse.json({ success: false, message: "Customer name is required" }, { status: 400 });
     }
 
     const formattedItems = (items || []).map((item: any) => {
       const price = Number(item.price) || 0;
       const quantity = Number(item.quantity) || 0;
       return {
-        name: item.name?.trim(),
+        name: item.name?.trim() || '',
         price,
         quantity,
         total: price * quantity,
@@ -160,15 +159,23 @@ export async function PUT(req: NextRequest) {
     const finalTotal = Number(total) || 
       formattedItems.reduce((sum: number, item: any) => sum + item.total, 0);
 
-    // Delete old items
+    // === BEST SOLUTION: Delete ALL old orders of this customer ===
     await prisma.orderItem.deleteMany({
-      where: { orderId: id },
+      where: {
+        order: {
+          customerName: customerName,
+        },
+      },
     });
 
-    const updatedOrder = await prisma.order.update({
-      where: { id },
+    await prisma.order.deleteMany({
+      where: { customerName: customerName },
+    });
+
+    // === Create ONE fresh order with updated items ===
+    const newOrder = await prisma.order.create({
       data: {
-        customerName,
+        customerName: customerName.trim(),
         total: finalTotal,
         items: {
           create: formattedItems,
@@ -179,7 +186,8 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      order: updatedOrder,
+      order: newOrder,
+      message: "Order updated successfully (All old orders replaced)",
     });
   } catch (error: any) {
     console.error('PUT Error:', error);
@@ -191,60 +199,25 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
-
     const { customerName } = body;
 
     if (!customerName) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Customer name required',
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: 'Customer name required' }, { status: 400 });
     }
 
-    // Find all orders of customer
-    const orders = await prisma.order.findMany({
-      where: {
-        customerName: customerName,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    const orderIds = orders.map((o) => o.id);
-
-    // Delete all items first
     await prisma.orderItem.deleteMany({
       where: {
-        orderId: {
-          in: orderIds,
-        },
+        order: { customerName: customerName }
       },
     });
 
-    // Delete all orders
     await prisma.order.deleteMany({
-      where: {
-        customerName: customerName,
-      },
+      where: { customerName: customerName },
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'All customer orders deleted',
-    });
+    return NextResponse.json({ success: true, message: 'All orders deleted' });
   } catch (error: any) {
     console.error(error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
