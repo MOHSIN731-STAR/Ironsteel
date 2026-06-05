@@ -325,18 +325,19 @@ const handleUpdate = async () => {
 
       {/* ================= MODAL ================= */}
       {showModal && editingOrder && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
-            <div className="p-8 border-b">
-              <h2 className="text-3xl font-bold mb-6">Update Order</h2>
+        
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 ">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden mt-3">
+            <div className="p-2 border-b">
+              
               <input
-                className="border border-gray-300 p-4 w-full rounded-2xl text-lg"
+                className="border border-gray-300 p-2 w-full rounded-2xl text-md"
                 value={formData.customerName}
                 onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
               />
             </div>
 
-            <div className="p-8 space-y-4 max-h-[420px] overflow-auto bg-gray-50">
+            <div className="p-2 space-y-3 max-h-[420px] overflow-auto bg-gray-50">
               {formData.items.map((item, index) => (
                 <div key={index} className="bg-white border border-gray-200 rounded-2xl p-5 grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-5">
@@ -358,28 +359,29 @@ const handleUpdate = async () => {
               ))}
             </div>
 
-            <div className="border-t border-b bg-white p-6">
-              <div className="flex justify-between items-center bg-gray-50 rounded-2xl p-4">
-                <span className="text-2xl font-semibold text-gray-700">Grand Total</span>
+            <div className="border-t border-b bg-white p-2">
+              <div className="flex justify-between items-center bg-gray-50 rounded-2xl ">
+                <span className="text-xl font-semibold text-gray-700">Grand Total</span>
                 <input
                   type="number"
                   value={formData.total}
                   onChange={(e) => handleTotalChange(Number(e.target.value))}
-                  className="text-5xl font-black text-emerald-600 text-right bg-transparent focus:outline-none w-52"
+                  className="text-3xl font-black text-emerald-600 text-right bg-transparent focus:outline-none w-52"
                 />
               </div>
             </div>
 
             <div className="p-8 flex justify-end gap-4 bg-gray-50">
-              <button onClick={() => { setShowModal(false); setEditingOrder(null); }} className="px-8 py-3 border border-gray-300 rounded-2xl hover:bg-gray-100">
+              <button onClick={() => { setShowModal(false); setEditingOrder(null); }} className="px-8 py-1 border border-gray-300 rounded-2xl hover:bg-gray-100">
                 Cancel
               </button>
-              <button onClick={handleUpdate} className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl hover:brightness-105">
+              <button onClick={handleUpdate} className="px-8 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl hover:brightness-105">
                 Update Order
               </button>
             </div>
           </div>
         </div>
+        
       )}
     </div>
   );
