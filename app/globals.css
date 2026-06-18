@@ -24,30 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 } */
-@media print {
-  body * {
-    visibility: hidden !important;
-  }
 
-  #print-area,
-  #print-area * {
-    visibility: visible !important;
-  }
-
-  #print-area {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-
-    width: 80mm;
-    padding: 5mm;
-
-    /* ✅ Border */
-    border: 1px dashed #000 !important;
-    border-radius: 12px;
-
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+#print-area {
+  display: none;
 }

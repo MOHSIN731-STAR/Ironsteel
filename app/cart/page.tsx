@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useCart } from "./../context/CartContext";
 import Image from "next/image";
 import Link from "next/link";
+import { printBillFromElement } from "../lib/printBill";
 
 type PriceMap = Record<number, number>;
 
@@ -120,7 +122,13 @@ export default function Cart() {
 
   const handlePrint = () => {
     setShowPrint(true);
-    setTimeout(() => window.print(), 300);
+    setTimeout(() => {
+      const printArea = document.getElementById("print-area");
+      if (printArea) {
+        printBillFromElement(printArea);
+      }
+      setShowPrint(false);
+    }, 300);
   };
 
   /* ---------------- EMPTY CART ---------------- */
@@ -344,80 +352,93 @@ export default function Cart() {
         </div>
       </div>
 
-      {/* ---------------- PRINT ---------------- */}
-   {/* ---------------- PRINT ---------------- */}
-{showPrint && (
-  <div
-    id="print-area"
-    className="p-6 border border-black w-[80mm] mx-auto text-sm"
-  >
-    <h2 className="text-center font-bold mb-2">
-      بسم اللہ آئرن سٹور
-    </h2>
+      {showPrint &&
+        createPortal(
+          <div
+            id="print-area"
+            className="border border-black text-sm"
+          >
+            <h2 className="text-center font-bold mb-2">
+              بسم اللہ آئرن سٹور
+            </h2>
 
-    <div className="text-center mb-3">
-   <div className="text-center mb-3">
-  <p>Customer: {customerName}</p>
-  <p>
-    Date:{" "}
-    {new Date().toLocaleDateString("en-GB", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    })}
-  </p>
-</div>
-    </div>
+            <div className="text-center mb-3">
+              <p>Customer: {customerName}</p>
+              <p>
+                Date:{" "}
+                {new Date().toLocaleDateString("en-GB", {
+                  weekday: "long",
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
 
-    {/* Header */}
-<div className="border-t border-b px-1 py-2 font-bold flex">
-  <span className="w-1/4">Item</span>
-  <span className="w-1/4 text-right">Price</span>
-  <span className="w-1/4 text-right">Qty/Kg</span>
-  <span className="w-1/4 text-right">Total</span>
-</div>
+            <div className="border-t border-b px-0 py-2 font-bold flex">
+              <span className="w-1/4">Item</span>
+              <span className="w-1/4 text-right">Price</span>
+              <span className="w-1/4 text-right">Qty/Kg</span>
+              <span className="w-1/4 text-right">Total</span>
+            </div>
 
-{/* Rows */}
-{cart.map((item) => (
-  <div
-    key={item.id}
-    className="flex py-1 border-b px-2"
-  >
-    <span className="w-1/4">{item.name}</span>
+            {cart.map((item) => (
+              <div
+                key={item.id}
+                className="bill-row flex py-1 border-b px-0"
+              >
+                <span className="w-1/4">{item.name}</span>
+                <span className="w-1/4 text-right">
+                  {getPrice(item)}
+                </span>
+                <span className="w-1/4 text-right">
+                  {item.quantity}
+                </span>
+                <span className="w-1/4 text-right">
+                  {getPrice(item) * item.quantity}
+                </span>
+              </div>
+            ))}
 
-    <span className="w-1/4 text-right">
-      {getPrice(item)}
-    </span>
+            <div className="flex justify-between font-bold mt-3 pt-2">
+              <span>Total</span>
+              <span>
+                Rs{" "}
+                {cart
+                  .reduce(
+                    (sum, item) =>
+                      sum + getPrice(item) * item.quantity,
+                    0
+                  )
+                  .toLocaleString()}
+              </span>
+            </div>
 
-    <span className="w-1/4 text-right">
-      {item.quantity}
-    </span>
+            <div className="border-t border-b py-2">
+              <div className="note-box" />
+            </div>
 
-    <span className="w-1/4 text-right">
-      {getPrice(item) * item.quantity}
-    </span>
-  </div>
-))}
-    <div className="flex justify-between font-bold mt-3 pt-2 ">
-      <span>Total</span>
-      <span>
-        Rs{" "}
-        {cart
-          .reduce(
-            (sum, item) =>
-              sum + getPrice(item) * item.quantity,
-            0
-          )
-          .toLocaleString()}
-      </span>
-    </div>
-<div className="border-t border-b py-2"> 
-  <textarea className="w-full h-16 p-3 mt-2 border border-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ></textarea> </div> <div className=" flex mt-6 justify-between "> <div className="flex-col gap-2 "> <p className="text-sm text-gray-900"> Shop Number </p> <p className="text-sm text-gray-900"> 0307-1038571 </p> </div> <div> <div className="flex gap-2 "> <p>Sign</p> <span>___________</span> </div> </div> </div> <div> <p className="text-center text-[10px] font-bold "> بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ </p> </div> </div>
-  
+            <div className="print-footer">
+              <div className="flex mt-6 justify-between">
+                <div className="flex-col gap-2">
+                  <p className="text-sm text-gray-900">Shop Number</p>
+                  <p className="text-sm text-gray-900">0307-1038571</p>
+                </div>
+                <div>
+                  <div className="flex gap-2">
+                    <p>Sign</p>
+                    <span>___________</span>
+                  </div>
+                </div>
+              </div>
 
-  
-)}
+              <p className="text-center text-[10px] font-bold">
+                بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
+              </p>
+            </div>
+          </div>,
+          document.body
+        )}
          </>
   );
 }
