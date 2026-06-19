@@ -1,9 +1,4 @@
-"use client";
-
-
 export const PRINT_BILL_WIDTH_MM = 80;
-const SINGLE_PAGE_LIMIT_MM = 280;
-const PAGE_HEIGHT_BUFFER_MM = 1;
 
 export function pxToMm(px: number): number {
   return (px / 96) * 25.4;
@@ -11,7 +6,9 @@ export function pxToMm(px: number): number {
 
 function measureBillHeightMm(bill: HTMLElement): number {
   const rect = bill.getBoundingClientRect();
-  return pxToMm(Math.ceil(Math.max(bill.scrollHeight, bill.offsetHeight, rect.height)));
+  return pxToMm(
+    Math.ceil(Math.max(bill.scrollHeight, bill.offsetHeight, rect.height))
+  );
 }
 
 const PRINT_BILL_STYLES = `
@@ -27,7 +24,6 @@ const PRINT_BILL_STYLES = `
     font-family: Arial, Helvetica, sans-serif;
     font-size: 14px;
     line-height: 1.4;
-    height: auto;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -97,36 +93,28 @@ const PRINT_BILL_STYLES = `
   }
 `;
 
-function buildPrintPageStyles(
-  fitsSinglePage: boolean,
-  pageHeightMm: number
-): string {
-  const pageHeight = fitsSinglePage ? `${pageHeightMm}mm` : "auto";
-
+function buildPrintPageStyles(pageHeightMm: number): string {
   return `
     @page {
-      size: ${PRINT_BILL_WIDTH_MM}mm ${pageHeight};
+      size: ${PRINT_BILL_WIDTH_MM}mm ${pageHeightMm}mm;
       margin: 0;
     }
 
     html,
     body {
       width: ${PRINT_BILL_WIDTH_MM}mm;
-      margin: 0;
-      padding: 0;
-      ${
-        fitsSinglePage
-          ? `
       height: ${pageHeightMm}mm;
       max-height: ${pageHeightMm}mm;
-      overflow: hidden;`
-          : ""
-      }
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
     }
 
     .print-bill {
-      page-break-inside: ${fitsSinglePage ? "avoid" : "auto"};
-      break-inside: ${fitsSinglePage ? "avoid" : "auto"};
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: avoid;
+      break-after: avoid;
     }
   `;
 }
@@ -134,8 +122,7 @@ function buildPrintPageStyles(
 export function printBillFromElement(element: HTMLElement): void {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
-  iframe.style.cssText =
-    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  iframe.style.cssText = `position:fixed;left:-9999px;top:0;width:${PRINT_BILL_WIDTH_MM}mm;height:auto;border:0;visibility:hidden`;
   document.body.appendChild(iframe);
 
   const win = iframe.contentWindow;
@@ -168,24 +155,26 @@ export function printBillFromElement(element: HTMLElement): void {
       return;
     }
 
-    const contentHeightMm = measureBillHeightMm(bill);
-    const fitsSinglePage = contentHeightMm <= SINGLE_PAGE_LIMIT_MM;
-    const pageHeightMm = Math.ceil(contentHeightMm + PAGE_HEIGHT_BUFFER_MM);
+    const applyPageSize = (heightMm?: number) => {
+      const pageHeightMm = heightMm ?? Math.ceil(measureBillHeightMm(bill));
+      const pageStyle =
+        doc.getElementById("print-page-size") ?? doc.createElement("style");
+      pageStyle.id = "print-page-size";
+      pageStyle.textContent = buildPrintPageStyles(pageHeightMm);
 
-    const pageStyle = doc.createElement("style");
-    pageStyle.textContent = buildPrintPageStyles(fitsSinglePage, pageHeightMm);
-    doc.head.appendChild(pageStyle);
+      if (!pageStyle.parentNode) {
+        doc.head.appendChild(pageStyle);
+      }
 
+      return pageHeightMm;
+    };
+
+    let pageHeightMm = applyPageSize();
     void bill.offsetHeight;
 
-    if (fitsSinglePage) {
-      const finalHeightMm = Math.ceil(
-        measureBillHeightMm(bill) + PAGE_HEIGHT_BUFFER_MM
-      );
-
-      if (finalHeightMm !== pageHeightMm) {
-        pageStyle.textContent = buildPrintPageStyles(true, finalHeightMm);
-      }
+    const finalHeightMm = Math.ceil(measureBillHeightMm(bill));
+    if (finalHeightMm !== pageHeightMm) {
+      applyPageSize(finalHeightMm);
     }
 
     const cleanup = () => {
