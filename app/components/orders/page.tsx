@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import qz from 'qz-tray';
+
 import {
   Pencil,
   Trash2,
@@ -9,7 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Printer,
+
 } from 'lucide-react';
 
 interface Item {
@@ -113,40 +113,37 @@ export default function OrdersPage() {
   };
 
   // ================= PRINT (QZ TRAY) =================
-  const handlePrint = async (group: any) => {
-    try {
-      if (!qz.websocket.isActive()) {
-        await qz.websocket.connect();
-      }
+const handleEdit = (group: any) => {
+  setEditingOrder(group);
+  setFormData({
+    customerName: group.customerName,
+    items: group.items,
+    total: group.total,
+  });
+  setShowModal(true);
+};
 
-      const config = qz.configs.create('SpeedX SP-200U'); // change printer name if needed
+const handleDelete = async (id: number) => {
+  const confirmDelete = confirm('Are you sure?');
 
-      let bill = '';
-      bill += '=============================\n';
-      bill += '      IRON STEEL STORE\n';
-      bill += '=============================\n';
-      bill += `Customer: ${group.customerName}\n`;
-      bill += `Date: ${new Date().toLocaleString()}\n`;
-      bill += '-----------------------------\n';
+  if (!confirmDelete) return;
 
-      group.items.forEach((item: any) => {
-        bill += `${item.name}\n`;
-        bill += `${item.quantity} x ${item.price} = ${item.quantity * item.price}\n`;
-        bill += '-----------------------------\n';
-      });
+  try {
+    const res = await fetch(`/api/orders/${id}`, {
+      method: 'DELETE',
+    });
 
-      bill += '=============================\n';
-      bill += `TOTAL: Rs. ${group.total}\n`;
-      bill += '=============================\n\n\n\n';
+    const data = await res.json();
 
-      await qz.print(config, [bill]);
-
-      alert('Print Successful');
-    } catch (err) {
-      console.error('PRINT ERROR:', err);
-      alert('Print Failed');
+    if (data.success) {
+      fetchOrders();
+      alert('Order deleted');
     }
-  };
+  } catch (error) {
+    console.error(error);
+    alert('Delete failed');
+  }
+};
 
   // ================= RENDER =================
   return (
@@ -211,25 +208,29 @@ export default function OrdersPage() {
                     {/* ACTIONS */}
                     <div className="flex justify-end gap-4 mt-6">
 
-                      <button
-                        onClick={() => handlePrint(group)}
-                        className="bg-green-600 text-white px-5 py-2 rounded-lg flex gap-2"
-                      >
-                        <Printer size={18} />
-                        Print
-                      </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleEdit(group);
+    }}
+    className="bg-indigo-600 text-white px-5 py-2 rounded-lg flex gap-2"
+  >
+    <Pencil size={18} />
+    Edit
+  </button>
 
-                      <button className="bg-indigo-600 text-white px-5 py-2 rounded-lg flex gap-2">
-                        <Pencil size={18} />
-                        Edit
-                      </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleDelete(group.id);
+    }}
+    className="bg-red-600 text-white px-5 py-2 rounded-lg flex gap-2"
+  >
+    <Trash2 size={18} />
+    Delete
+  </button>
 
-                      <button className="bg-red-600 text-white px-5 py-2 rounded-lg flex gap-2">
-                        <Trash2 size={18} />
-                        Delete
-                      </button>
-
-                    </div>
+</div>
                   </div>
                 )}
               </div>
