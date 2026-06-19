@@ -204,11 +204,7 @@ const handleUpdateOrder = async () => {
 };
 
 const handleDelete = async (customerName: string) => {
-  const confirmDelete = confirm(
-    'Delete complete customer order table?'
-  );
-
-  if (!confirmDelete) return;
+  if (!confirm('Are you sure?')) return;
 
   try {
     const res = await fetch('/api/orders', {
@@ -216,33 +212,21 @@ const handleDelete = async (customerName: string) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        customerName,
-      }),
+      body: JSON.stringify({ customerName }),
     });
 
     const data = await res.json();
 
     if (data.success) {
-      setOrders((prev) =>
-        prev.filter(
-          (order) =>
-            order.customerName.toLowerCase().trim() !==
-            customerName.toLowerCase().trim()
-        )
-      );
-
-      alert('Complete table deleted');
+      fetchOrders();
+      alert('Orders deleted successfully');
     } else {
-      alert(data.message || 'Delete failed');
+      alert(data.message);
     }
-
   } catch (error) {
-    console.log(error);
-    alert('Delete failed');
+    console.error(error);
   }
 };
-
   // ================= RENDER =================
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -293,15 +277,36 @@ const handleDelete = async (customerName: string) => {
                 {expandedOrders[group.groupKey] && (
                   <div className="p-6">
 
-                    {group.items.map((item: any, i: number) => (
-                      <div key={i} className="flex justify-between border-b py-2">
-                        <span>{item.name}</span>
-                        <span>{item.quantity} x {item.price}</span>
-                        <span className="font-bold">
-                          Rs {item.price * item.quantity}
-                        </span>
-                      </div>
-                    ))}
+                  {/* TABLE HEADER */}
+<div className="grid grid-cols-5 gap-4 border-b font-bold pb-2 mb-2">
+  <div>Date</div>
+  <div>Item</div>
+  <div>Quantity</div>
+  <div>Price</div>
+  <div>Total Price</div>
+</div>
+
+{/* TABLE ROWS */}
+{group.items.map((item: any, i: number) => (
+  <div
+    key={i}
+    className="grid grid-cols-5 gap-4 border-b py-2 items-center"
+  >
+    <div>
+      {new Date(item.orderDate).toLocaleDateString()}
+    </div>
+
+    <div>{item.name}</div>
+
+    <div>{item.quantity}</div>
+
+    <div>Rs {item.price}</div>
+
+    <div className="font-bold">
+      Rs {item.price * item.quantity}
+    </div>
+  </div>
+))}
 
                     {/* ACTIONS */}
                     <div className="flex justify-end gap-4 mt-6">
@@ -320,7 +325,7 @@ const handleDelete = async (customerName: string) => {
   <button
     onClick={(e) => {
       e.stopPropagation();
-      handleDelete(group.id);
+      handleDelete(group.customerName);
     }}
     className="bg-red-600 text-white px-5 py-2 rounded-lg flex gap-2"
   >
