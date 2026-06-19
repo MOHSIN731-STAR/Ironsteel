@@ -281,7 +281,7 @@ const handleDelete = async (customerName: string) => {
 <div className="grid grid-cols-5 gap-4 border-b font-bold pb-2 mb-2">
   <div>Date</div>
   <div>Item</div>
-  <div>Quantity</div>
+  <div>Qty/KG</div>
   <div>Price</div>
   <div>Total Price</div>
 </div>
