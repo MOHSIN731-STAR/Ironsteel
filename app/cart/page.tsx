@@ -363,8 +363,8 @@ export default function Cart() {
             </h2>
 
             <div className="text-center mb-3">
-              <p>Customer: {customerName}</p>
-              <p>
+              <p>Name: {customerName}</p>
+              <p className="font-bold text-[2px]">
                 Date:{" "}
                 {new Date().toLocaleDateString("en-GB", {
                   weekday: "long",
@@ -400,7 +400,7 @@ export default function Cart() {
               </div>
             ))}
 
-            <div className="flex justify-between font-bold mt-3 pt-2">
+            <div className="flex justify-between font-extrabold mt-3 pt-2">
               <span>Total</span>
               <span>
                 Rs{" "}
@@ -414,15 +414,15 @@ export default function Cart() {
               </span>
             </div>
 
-            <div className="border-t border-b py-2">
+            <div className="border-t border-b py-1.5">
               <div className="note-box" />
             </div>
 
             <div className="print-footer">
-              <div className="flex mt-6 justify-between">
+              <div className="flex mt-2 justify-between">
                 <div className="flex-col gap-2">
-                  <p className="text-sm text-gray-900">Shop Number</p>
-                  <p className="text-sm text-gray-900">0307-1038571</p>
+                  <p className="text-sm font-bold text-gray-900">Shop Number</p>
+                  <p className="text-sm font-bold text-gray-900">0307-1038571</p>
                 </div>
                 <div>
                   <div className="flex gap-2">
@@ -432,9 +432,9 @@ export default function Cart() {
                 </div>
               </div>
 
-              <p className="text-center text-[10px] font-bold">
+              <h3 className="text-center text-3xl font-bold ">
                 بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
-              </p>
+              </h3>
             </div>
           </div>,
           document.body

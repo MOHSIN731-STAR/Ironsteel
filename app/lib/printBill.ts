@@ -23,7 +23,9 @@ const PRINT_BILL_STYLES = `
     background: white;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 14px;
-    line-height: 1.4;
+    line-height: 1.5;
+    font-weight: 750 !important;
+
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -85,11 +87,11 @@ const PRINT_BILL_STYLES = `
 
   h2 {
     margin: 0 0 0.5rem;
-    font-size: 1rem;
+    font-size: 2.5rem;
   }
 
   p {
-    margin: 0.15rem 0;
+    margin: 0.5rem 0;
   }
 `;
 
