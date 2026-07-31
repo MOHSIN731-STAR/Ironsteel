@@ -22,20 +22,36 @@ const PRINT_BILL_STYLES = `
     padding: 0;
     background: white;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size:13px;
+line-height:1.35;
     font-weight: 750 !important;
 
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .print-bill {
-    width: ${PRINT_BILL_WIDTH_MM}mm;
-    padding: 4mm 1.5mm 2mm;
-    border: 1px dashed #000;
-    border-radius: 8px;
-  }
+ .print-bill{
+    width:${PRINT_BILL_WIDTH_MM}mm !important;
+
+    min-width:${PRINT_BILL_WIDTH_MM}mm;
+    max-width:${PRINT_BILL_WIDTH_MM}mm;
+
+    margin:0 !important;
+
+    padding:3mm 2mm;
+
+    box-sizing:border-box;
+
+    background:#fff;
+
+    color:#000;
+
+    page-break-inside:avoid;
+    break-inside:avoid;
+
+    page-break-after:avoid;
+    break-after:avoid;
+}
 
   .text-center { text-align: center; }
   .text-right { text-align: right; }
@@ -85,11 +101,12 @@ const PRINT_BILL_STYLES = `
     break-inside: avoid;
   }
 
-  h2 {
-    margin: 0 0 0.5rem;
-    font-size: 2.5rem;
-  }
-
+h2{
+    margin:0 0 2mm;
+    text-align:center;
+    font-size:22px;
+    font-weight:700;
+}
   p {
     margin: 0.5rem 0;
   }
@@ -98,18 +115,24 @@ const PRINT_BILL_STYLES = `
 function buildPrintPageStyles(pageHeightMm: number): string {
   return `
     @page {
-      size: ${PRINT_BILL_WIDTH_MM}mm ${pageHeightMm}mm;
+      size: ${PRINT_BILL_WIDTH_MM}mm ${pageHeightMm}mm auto;
       margin: 0;
     }
 
     html,
     body {
-      width: ${PRINT_BILL_WIDTH_MM}mm;
-      height: ${pageHeightMm}mm;
-      max-height: ${pageHeightMm}mm;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
+       margin: 0 !important;
+  padding: 0 !important;
+
+  width: ${PRINT_BILL_WIDTH_MM}mm !important;
+  min-width: ${PRINT_BILL_WIDTH_MM}mm !important;
+  max-width: ${PRINT_BILL_WIDTH_MM}mm !important;
+
+  background: #fff;
+
+  overflow: hidden;
+
+  display: block;
     }
 
     .print-bill {
@@ -124,7 +147,7 @@ function buildPrintPageStyles(pageHeightMm: number): string {
 export function printBillFromElement(element: HTMLElement): void {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
-  iframe.style.cssText = `position:fixed;left:-9999px;top:0;width:${PRINT_BILL_WIDTH_MM}mm;height:auto;border:0;visibility:hidden`;
+  iframe.style.cssText = `position:fixed;top:0;width:${PRINT_BILL_WIDTH_MM}mm;height:auto;border:0;left:0;opacity:0;pointer-events:none;`;
   document.body.appendChild(iframe);
 
   const win = iframe.contentWindow;
@@ -140,7 +163,7 @@ export function printBillFromElement(element: HTMLElement): void {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Bill</title>
+  <title></title>
   <style>${PRINT_BILL_STYLES}</style>
 </head>
 <body>
@@ -186,7 +209,17 @@ export function printBillFromElement(element: HTMLElement): void {
 
     win.addEventListener("afterprint", cleanup);
     win.focus();
-    win.print();
+    bill.style.width = `${PRINT_BILL_WIDTH_MM}mm`;
+bill.style.margin = "0";
+bill.style.padding = "3mm 2mm";
+
+doc.body.style.margin = "0";
+doc.body.style.padding = "0";
+
+doc.documentElement.style.margin = "0";
+doc.documentElement.style.padding = "0";
+
+win.print();
   };
 
   requestAnimationFrame(() => {
