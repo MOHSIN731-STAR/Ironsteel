@@ -32,8 +32,8 @@ export default function Navbar(): JSX.Element {
           <Link href="/dashboard" className="hover:text-shadow-blue-400">
             Products
           </Link>
- <Link href="/components/register" className="hover:text-shadow-blue-400">
-          register
+ <Link href="/logoutButton" className="hover:text-shadow-blue-400">
+          Logout
           </Link>
           <Link href="/cart" className="relative hover:text-shadow-blue-400">
             Cart
