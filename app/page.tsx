@@ -1,9 +1,10 @@
 import React from 'react'
-import ProductPage from "./products/page";
+import LoginPage from "./components/login/page";
+
 
 const page = () => {
   return (
-    <div><ProductPage /></div>
+    <div><LoginPage/></div>
   )
 }
 

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../.././lib/prisma";
-
+import { requireAuth } from "../../lib/authGuard";
 
 export async function POST(req:NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const body = await req.json();
 
@@ -68,7 +74,13 @@ export async function POST(req:NextRequest) {
     );
   }
 }
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const orders = await prisma.order.findMany({
       orderBy: {
@@ -137,6 +149,11 @@ export async function GET() {
 // app/api/orders/route.ts  (ya jahan bhi aapka route hai)
 
 export async function PUT(req: NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const body = await req.json();
     const { orderId, customerName, items, total } = body;
@@ -197,6 +214,12 @@ export async function PUT(req: NextRequest) {
 
 // ================= FIXED DELETE =================
 export async function DELETE(req: NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const body = await req.json();
     const { customerName } = body;

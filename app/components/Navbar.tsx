@@ -29,10 +29,12 @@ export default function Navbar(): JSX.Element {
           <Link href="/components/walking" className="hover:text-shadow-blue-400">
             walking customer
           </Link>
-          <Link href="/products" className="hover:text-shadow-blue-400">
+          <Link href="/dashboard" className="hover:text-shadow-blue-400">
             Products
           </Link>
-
+ <Link href="/components/register" className="hover:text-shadow-blue-400">
+          register
+          </Link>
           <Link href="/cart" className="relative hover:text-shadow-blue-400">
             Cart
             <CartCount count={cartCount} />

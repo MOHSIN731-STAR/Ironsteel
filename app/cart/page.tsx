@@ -137,7 +137,7 @@ export default function Cart() {
     return (
       <div className="text-center py-20">
         <h1 className="text-3xl font-bold">Cart Empty</h1>
-        <Link href="/" className="text-3xl font-bold hover:text-blue-500 hover:underline">Products</Link>
+        <Link href="/dashboard" className="text-3xl font-bold hover:text-blue-500 hover:underline">Products</Link>
       </div>
     );
   }

@@ -1,8 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "../.././lib/prisma";
+import { requireAuth } from "../../lib/authGuard";
 
 // CREATE
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const body = await req.json();
     const { customerName, items } = body;
@@ -50,7 +57,13 @@ export async function POST(req: NextRequest) {
 }
 
 // GET ALL
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const data = await prisma.walking.findMany({
       include: { items: true },
@@ -65,6 +78,12 @@ export async function GET() {
 
 // UPDATE
 export async function PUT(req:NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const body = await req.json();
     const { orderId, customerName, items, total } = body;
@@ -122,6 +141,12 @@ export async function PUT(req:NextRequest) {
 }
 // DELETE
 export async function DELETE(req: NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const { orderId } = await req.json();
 

@@ -4,9 +4,9 @@ interface CartCountProps {
   count: number;
 }
 
-export default function CartCount(
-  { count }: CartCountProps
-): React.ReactElement | null {
+export default function CartCount({
+  count,
+}: CartCountProps): React.ReactElement | null {
   if (count === 0) return null;
 
   return (

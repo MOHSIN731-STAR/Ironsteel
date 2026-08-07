@@ -1,10 +1,16 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "../.././lib/prisma";
+import { requireAuth } from "../../lib/authGuard";
 
 
 
 // ✅ POST: New customer create
 export async function POST(request:NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const body = await request.json();
 
@@ -36,7 +42,12 @@ export async function POST(request:NextRequest) {
     );
   }
 }
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const customers = await prisma.customer.findMany();
 
@@ -58,6 +69,12 @@ export async function GET() {
   }
 }
 export async function DELETE(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = Number(searchParams.get("id"));
