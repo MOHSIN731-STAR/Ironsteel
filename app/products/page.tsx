@@ -13,7 +13,7 @@ const products: Product[] = [
   { id: 6, name: "شاپر", image: "/shapper.jpeg" },
   { id: 7, name: "ٹائل 10انچ والی", image: "/ٹائل 10انچ والی.png" },
   { id: 8, name: "ٹائل فٹ والی", image: "/ٹائل فٹ والی.png" },
-  { id: 9, name: "سپریم سریا", image: "/سپریم سریا.png" },
+  { id: 9, name: "سریا Azmat Gold ", image: "/سپریم سریا.png" },
   { id: 10, name: "MOIZ سریا", image: "/سپریم سریا.png" },
   { id: 11, name: "تار", image: "/tar.png" },
   { id: 12, name: "پانی پائپ", image: "/watarpip.png" },
