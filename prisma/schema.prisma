@@ -59,7 +59,7 @@ model OrderItem {
 
   name       String
   price      Float
-    quantity   Float
+  quantity   Float
   total      Float
 }
 
