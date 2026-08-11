@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Search,
     Plus,
+      Printer,
 
 } from 'lucide-react';
 
@@ -227,6 +228,242 @@ const handleDelete = async (customerName: string) => {
     console.error(error);
   }
 };
+// ================= PRINT =================
+const handlePrint = (group: any) => {
+  const printWindow = window.open(
+    '',
+    '_blank',
+    'width=400,height=600'
+  );
+
+  if (!printWindow) {
+    alert('Please allow popups for printing.');
+    return;
+  }
+
+  const formattedDate = new Date().toLocaleDateString(
+    'en-GB',
+    {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }
+  );
+
+  const itemsHTML = group.items
+    .map(
+      (item: any) => `
+        <div class="bill-row">
+          <span class="item-name">${item.name}</span>
+          <span class="price">${Number(item.price).toLocaleString()}</span>
+          <span class="qty">${item.quantity}</span>
+          <span class="total">
+            ${(
+              Number(item.price) *
+              Number(item.quantity)
+            ).toLocaleString()}
+          </span>
+        </div>
+      `
+    )
+    .join('');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Order - ${group.customerName}</title>
+
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            width: 80mm;
+          }
+
+          body {
+            padding: 4mm;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #000;
+          }
+
+          .shop-name {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
+
+          .info {
+            margin-bottom: 10px;
+            line-height: 1.6;
+          }
+
+          .table-header,
+          .bill-row {
+            display: flex;
+            width: 100%;
+          }
+
+          .table-header {
+            font-weight: bold;
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+            padding: 6px 0;
+          }
+
+          .bill-row {
+            border-bottom: 1px solid #999;
+            padding: 5px 0;
+          }
+
+          .item-name {
+            width: 30%;
+            word-break: break-word;
+          }
+
+          .price {
+            width: 23%;
+            text-align: right;
+          }
+
+          .qty {
+            width: 18%;
+            text-align: right;
+          }
+
+          .total {
+            width: 29%;
+            text-align: right;
+          }
+
+          .grand-total {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #000;
+            margin-top: 8px;
+            padding-top: 8px;
+            font-size: 16px;
+            font-weight: bold;
+          }
+
+          .footer {
+            border-top: 1px solid #000;
+            margin-top: 15px;
+            padding-top: 8px;
+          }
+
+          .shop-sign {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+          }
+
+          .shop-number {
+            text-align: left;
+            font-weight: bold;
+          }
+
+          .sign {
+            text-align: right;
+            font-weight: bold;
+          }
+
+          .address {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            margin-top: 12px;
+            line-height: 1.5;
+          }
+        </style>
+      </head>
+
+      <body>
+
+        <div class="shop-name">
+          بسم اللہ آئرن سٹور
+        </div>
+
+        <div class="info">
+          <div>
+            <strong>Name:</strong>
+            ${group.customerName}
+          </div>
+
+          <div>
+            <strong>Date:</strong>
+            ${formattedDate}
+          </div>
+        </div>
+
+        <div class="table-header">
+          <span class="item-name">Item</span>
+          <span class="price">Price</span>
+          <span class="qty">Qty/KG</span>
+          <span class="total">Total</span>
+        </div>
+
+        ${itemsHTML}
+
+        <div class="grand-total">
+          <span>Grand Total</span>
+          <span>
+            Rs ${Number(group.total).toLocaleString()}
+          </span>
+        </div>
+
+        <div class="footer">
+
+          <div class="shop-sign">
+
+            <div class="shop-number">
+              <div>Shop Number</div>
+              <div>0307-1038571</div>
+            </div>
+
+            <div class="sign">
+              <div>Sign</div>
+              <div>___________</div>
+            </div>
+
+          </div>
+
+          <div class="address">
+            بسم اللہ آئرن سٹور جمالپور نزد ماہر والا
+            پٹرول پمپ قائم پور روڈ
+          </div>
+
+        </div>
+
+      </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+
+  printWindow.onload = () => {
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 300);
+  };
+};
   // ================= RENDER =================
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -309,7 +546,8 @@ const handleDelete = async (customerName: string) => {
 ))}
 
                     {/* ACTIONS */}
-                    <div className="flex justify-end gap-4 mt-6">
+{/* ACTIONS */}
+<div className="flex justify-end gap-4 mt-6">
 
   <button
     onClick={(e) => {
@@ -331,6 +569,17 @@ const handleDelete = async (customerName: string) => {
   >
     <Trash2 size={18} />
     Delete
+  </button>
+
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handlePrint(group);
+    }}
+    className="bg-green-600 text-white px-5 py-2 rounded-lg flex gap-2"
+  >
+    <Printer size={18} />
+    Print
   </button>
 
 </div>
