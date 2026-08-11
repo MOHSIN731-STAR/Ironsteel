@@ -16,13 +16,14 @@ const products: Product[] = [
   { id: 9, name: "سپریم سریا", image: "/سپریم سریا.png" },
   { id: 10, name: "MOIZ سریا", image: "/سپریم سریا.png" },
   { id: 11, name: "تار", image: "/tar.png" },
-  { id: 12, name: "پانی پائپ", image: "/water_pipe.jpeg" },
+  { id: 12, name: "پانی پائپ", image: "/watarpip.png" },
   { id: 13, name: "بالٹی", image: "/bati.jpeg" },
   { id: 14, name: "ڈبہ", image: "/daba.jpeg" },
   { id: 15, name: "موٹی بجری", image: "/motibajri.jpeg" },
   { id: 16, name: "باریک بجری", image: "/barikbajri.jpeg" },
   { id: 17, name: "پلاسٹک دروازہ", image: "/door.png" },
   { id: 18, name: "فوم", image: "/foam.png" },
+  { id: 19, name: "رینگ", image: "/RING.png" },
 ];
 
 export default function Products() {
