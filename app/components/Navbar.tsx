@@ -18,6 +18,9 @@ export default function Navbar(): JSX.Element {
         <Link href="/components/stationery" className="hover:text-shadow-blue-400">
           Stationary
         </Link>
+         <Link href="/components/customer-items" className="hover:text-shadow-blue-400">
+          customer data 
+        </Link>
 
         <div className="flex gap-8 items-center">
             <Link href="/components/customer" className="hover:text-shadow-blue-400">

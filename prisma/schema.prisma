@@ -7,19 +7,33 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
 ////////////////////////////////////////////////////
 // CUSTOMER MODEL
 ////////////////////////////////////////////////////
 
 model Customer {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
 
-  orders    Order[]
+  orders Order[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CustomerItem {
+  id            Int      @id @default(autoincrement())
+
+  customerName  String
+  item          String
+  quantity      Float
+  price         Float
+  totalPrice    Float
+  paidPrice     Float    @default(0)
+  remainingPrice Float   @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 ////////////////////////////////////////////////////
@@ -30,37 +44,36 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-
 }
+
 // ORDER MODEL
 ////////////////////////////////////////////////////
 
 model Order {
-  id            Int         @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  customerId    Int?
-  customer      Customer?   @relation(fields: [customerId], references: [id])
+  customerId Int?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
-  customerName  String
-  total         Float
+  customerName String
+  total        Float
 
-  items         OrderItem[]
+  items OrderItem[]
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model OrderItem {
-  id         Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  orderId    Int
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId Int
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  name       String
-  price      Float
-  quantity   Float
-  total      Float
+  name     String
+  price    Float
+  quantity Float
+  total    Float
 }
 
 ////////////////////////////////////////////////////
@@ -68,25 +81,25 @@ model OrderItem {
 ////////////////////////////////////////////////////
 
 model Walking {
-  id           Int           @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   customerName String?
   total        Float?
 
-  items        WalkingItem[]
+  items WalkingItem[]
 
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WalkingItem {
-  id         Int       @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  walkingId  Int
-  walking    Walking   @relation(fields: [walkingId], references: [id], onDelete: Cascade)
+  walkingId Int
+  walking   Walking @relation(fields: [walkingId], references: [id], onDelete: Cascade)
 
-  name       String?
-  price      Float?
-  quantity   Int?
-  total      Float?
+  name     String?
+  price    Float?
+  quantity Int?
+  total    Float?
 }
