@@ -25,6 +25,11 @@ export default function WalkingOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [grandTotal, setGrandTotal] = useState<number>(0);
 
+  // ================= DATE FILTER =================
+
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const [hoveredOrder, setHoveredOrder] =
     useState<WalkingOrder | null>(null);
 
@@ -479,8 +484,6 @@ export default function WalkingOrdersPage() {
                 <strong>Date:</strong>
                 ${formattedDate}
               </div>
-
-            
             </div>
 
             <div class="table-header">
@@ -516,19 +519,22 @@ export default function WalkingOrdersPage() {
             </div>
 
             <div class="flex flex-2 justify-between mt-4">
-             <div class="flex flex-row gap-2">
-              <div class="shop-number">
-                Shop Number
+              <div class="flex flex-row gap-2">
+
+                <div class="shop-number">
+                  Shop Number
+                </div>
+
+                <div>
+                  0307-1038571
+                </div>
+
+                <div class="sign">
+                  Sign: _____________
+                </div>
+
               </div>
 
-              <div>
-                0307-1038571
-              </div>
-
-              <div class="sign">
-                Sign: _____________
-              </div>
-</div>
               <div class="address">
                 بسم اللہ آئرن سٹور
                 جمالپور نزد ماہر والا
@@ -578,16 +584,90 @@ export default function WalkingOrdersPage() {
       }, 150);
   };
 
-  // ================= FILTER =================
+  // ================= DATE FILTER =================
+
+  const dateFilteredOrders =
+    orders.filter((order) => {
+      const orderDate = new Date(
+        order.createdAt
+      );
+
+      if (fromDate) {
+        const from = new Date(
+          `${fromDate}T00:00:00`
+        );
+
+        if (orderDate < from) {
+          return false;
+        }
+      }
+
+      if (toDate) {
+        const to = new Date(
+          `${toDate}T23:59:59.999`
+        );
+
+        if (orderDate > to) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+  // ================= SEARCH + DATE FILTER =================
 
   const filteredOrders =
-    orders.filter((o) =>
+    dateFilteredOrders.filter((o) =>
       o.customerName
         .toLowerCase()
         .includes(
           searchTerm.toLowerCase()
         )
     );
+
+  // ================= ITEM COUNTING =================
+
+  const itemCounting =
+    filteredOrders.reduce(
+      (
+        acc: Record<string, number>,
+        order
+      ) => {
+        order.items.forEach((item) => {
+          const itemName =
+            item.name.trim();
+
+          if (!itemName) return;
+
+          acc[itemName] =
+            (acc[itemName] || 0) +
+            Number(item.quantity);
+        });
+
+        return acc;
+      },
+      {}
+    );
+
+  // ================= FILTERED TOTAL =================
+
+  const filteredGrandTotal =
+    filteredOrders.reduce(
+      (sum, order) =>
+        sum + Number(order.total),
+      0
+    );
+
+  const totalOrders =
+    filteredOrders.length;
+
+  // ================= CLEAR DATE FILTER =================
+
+  const clearDateFilter = () => {
+    setFromDate('');
+    setToDate('');
+  };
 
   // ================= UI =================
 
@@ -627,6 +707,141 @@ export default function WalkingOrdersPage() {
             )
           }
         />
+
+        {/* ================= DATE FILTER ================= */}
+
+        <div className="bg-white rounded-2xl shadow p-5 mb-5">
+
+          <div className="flex flex-col md:flex-row md:items-end gap-4">
+
+            {/* FROM DATE */}
+
+            <div className="flex-1">
+
+              <label className="block text-sm font-semibold mb-2">
+                From Date
+              </label>
+
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) =>
+                  setFromDate(
+                    e.target.value
+                  )
+                }
+                className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+            </div>
+
+            {/* TO DATE */}
+
+            <div className="flex-1">
+
+              <label className="block text-sm font-semibold mb-2">
+                To Date
+              </label>
+
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) =>
+                  setToDate(
+                    e.target.value
+                  )
+                }
+                className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+            </div>
+
+            {/* CLEAR */}
+
+            <button
+              onClick={clearDateFilter}
+              className="px-5 py-3 border rounded-xl bg-gray-100 hover:bg-gray-200 transition"
+            >
+              Clear Date
+            </button>
+
+          </div>
+
+        </div>
+
+        {/* ================= COUNTING ================= */}
+
+        <div className="bg-white rounded-2xl shadow p-5 mb-6">
+
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-5">
+
+            <h2 className="text-xl font-bold">
+              Item Counting
+            </h2>
+
+            <div className="flex gap-5 text-sm">
+
+              <span className="font-semibold">
+                Total Orders:
+                <span className="text-blue-600 ml-1">
+                  {totalOrders}
+                </span>
+              </span>
+
+              <span className="font-semibold">
+                Total Amount:
+                <span className="text-green-600 ml-1">
+                  Rs.{' '}
+                  {filteredGrandTotal.toLocaleString()}
+                </span>
+              </span>
+
+            </div>
+
+          </div>
+
+          {Object.keys(itemCounting).length >
+          0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+
+              {Object.entries(
+                itemCounting
+              ).map(
+                ([
+                  itemName,
+                  quantity,
+                ]) => (
+
+                  <div
+                    key={itemName}
+                    className="border rounded-xl p-4 bg-gray-50 hover:shadow-md transition"
+                  >
+
+                    <div className="font-bold text-sm min-h-[40px]">
+                      {itemName}
+                    </div>
+
+                    <div className="text-2xl font-bold text-blue-600 mt-2">
+                      {quantity}
+                    </div>
+
+                    <div className="text-xs text-gray-500">
+                      Quantity
+                    </div>
+
+                  </div>
+
+                )
+              )}
+
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 py-5">
+              No items found for selected date range
+            </div>
+          )}
+
+        </div>
 
         {/* ERROR */}
 
@@ -929,7 +1144,7 @@ export default function WalkingOrdersPage() {
               <div className="mt-5 pt-3 border-t flex justify-between font-bold text-lg">
 
                 <span>
-                   Total Price
+                  Total Price
                 </span>
 
                 <span className="text-green-600">
@@ -1059,7 +1274,6 @@ export default function WalkingOrdersPage() {
                     </div>
 
                   </div>
-
                 )
               )}
 

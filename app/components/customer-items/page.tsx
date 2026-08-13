@@ -12,6 +12,8 @@ interface CustomerItem {
   totalPrice: number;
   paidPrice: number;
   remainingPrice: number;
+   createdAt: string;
+  updatedAt: string;
 }
 
 export default function CustomerItemsPage() {
@@ -216,6 +218,56 @@ export default function CustomerItemsPage() {
       alert("Delete failed");
     }
   };
+  // =========================
+// DELETE FULL CUSTOMER GROUP
+// =========================
+
+const handleDeleteGroup = async (
+  customerName: string,
+  customerItems: CustomerItem[]
+) => {
+  const confirmed = window.confirm(
+    `Are you sure you want to delete ALL ${customerItems.length} records of "${customerName}"?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setLoading(true);
+
+    // Delete all customer records
+    await Promise.all(
+      customerItems.map(async (record) => {
+        const response = await fetch("/api/customer-items", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: record.id,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message || `Failed to delete record ${record.id}`
+          );
+        }
+      })
+    );
+
+    // Refresh table
+    await fetchItems();
+
+  } catch (error) {
+    console.error("Group delete error:", error);
+    alert("Some records could not be deleted.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // =========================
   // RESET
@@ -286,9 +338,9 @@ export default function CustomerItemsPage() {
     // ITEMS HTML
     // =========================
 
-   const itemsHTML = customerItems
-  .map(
-    (record) => `
+    const itemsHTML = customerItems
+      .map(
+        (record) => `
       <div class="item-box text-center">
 
         <div class="item-title text-center">
@@ -316,41 +368,42 @@ export default function CustomerItemsPage() {
         </div>
 
         <div class="item-row total-row">
-  <span class="label">
-    Total Amount
-  </span>
+          <span class="label">
+            Total Amount
+          </span>
 
-  <span class="value">
-    Rs. ${Number(record.totalPrice).toLocaleString()}
-  </span>
-</div>
+          <span class="value">
+            Rs. ${Number(record.totalPrice).toLocaleString()}
+          </span>
+        </div>
 
-<div class="item-row item-paid">
-  <span class="label">
-    Paid Amount
-  </span>
+        <div class="item-row item-paid">
+          <span class="label">
+            Paid Amount
+          </span>
 
-  <span class="value">
-    Rs. ${Number(record.paidPrice).toLocaleString()}
-  </span>
-</div>
+          <span class="value">
+            Rs. ${Number(record.paidPrice).toLocaleString()}
+          </span>
+        </div>
 
-<div class="item-row item-remaining">
-  <span class="label">
-    Remaining Amount
-  </span>
+        <div class="item-row item-remaining">
+          <span class="label">
+            Remaining Amount
+          </span>
 
-  <span class="value">
-    Rs. ${Number(record.remainingPrice).toLocaleString()}
-  </span>
-</div>
+          <span class="value">
+            Rs. ${Number(record.remainingPrice).toLocaleString()}
+          </span>
+        </div>
+
+      </div>
     `
-  )
-  .join("");
+      )
+      .join("");
 
-
-// =========================
-// PRINT HTML
+    // =========================
+    // PRINT HTML
     // =========================
 
     printWindow.document.write(`
@@ -392,20 +445,12 @@ export default function CustomerItemsPage() {
               color: #000;
             }
 
-            /* =========================
-               SHOP
-            ========================= */
-
             .shop {
               text-align: center;
               font-size: 18px;
               font-weight: bold;
               margin-bottom: 6px;
             }
-
-            /* =========================
-               CUSTOMER
-            ========================= */
 
             .customer {
               text-align: center;
@@ -414,50 +459,28 @@ export default function CustomerItemsPage() {
               margin-bottom: 4px;
             }
 
-            /* =========================
-               DATE
-            ========================= */
-
             .date {
               text-align: center;
               font-size: 10px;
               margin-bottom: 8px;
             }
 
-            /* =========================
-               LINE
-            ========================= */
-
             .line {
               border-top: 1px solid #000;
               margin: 7px 0;
             }
 
-            /* =========================
-               ITEM BOX
-            ========================= */
-
             .item-box {
               padding: 8px 0;
-             
               page-break-inside: avoid;
-              
             }
 
-            /* =========================
-               ITEM NAME
-            ========================= */
-
-          .item-title {
-  text-align: center;
-  font-size: 14px;
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-            /* =========================
-               ITEM ROW
-            ========================= */
+            .item-title {
+              text-align: center;
+              font-size: 14px;
+              font-weight: bold;
+              margin-bottom: 5px;
+            }
 
             .item-row {
               display: flex;
@@ -476,35 +499,22 @@ export default function CustomerItemsPage() {
               white-space: nowrap;
             }
 
-            /* =========================
-               ITEM TOTAL
-            ========================= */
-
             .total-row {
               margin-top: 2px;
               font-weight: bold;
             }
 
-            /* =========================
-               ITEM REMAINING
-            ========================= */
-
             .item-remaining {
               margin-top: 5px;
               padding-top: 5px;
-               border-bottom: 1px solid #000; 
+              border-bottom: 1px solid #000;
               font-weight: bold;
             }
 
             .item-remaining .label,
             .item-remaining .value {
               font-size: 13px;
-              
             }
-
-            /* =========================
-               OVERALL SUMMARY
-            ========================= */
 
             .summary {
               width: 100%;
@@ -520,10 +530,6 @@ export default function CustomerItemsPage() {
               font-weight: bold;
             }
 
-            /* =========================
-               OVERALL TOTAL
-            ========================= */
-
             .overall-total {
               border-top: 1px solid #000;
               border-bottom: 1px solid #000;
@@ -535,29 +541,17 @@ export default function CustomerItemsPage() {
               font-size: 16px;
             }
 
-            /* =========================
-               OVERALL PAID
-            ========================= */
-
             .overall-paid {
               margin-top: 5px;
               border-bottom: 1px dashed #777;
               font-size: 14px;
             }
 
-            /* =========================
-               OVERALL REMAINING
-            ========================= */
-
             .overall-remaining {
               margin-top: 5px;
               border-bottom: 1px solid #000;
               font-size: 14px;
             }
-
-            /* =========================
-               FOOTER
-            ========================= */
 
             .footer {
               border-top: 1px solid #000;
@@ -596,19 +590,13 @@ export default function CustomerItemsPage() {
 
         <body>
 
-          <!-- SHOP -->
-
           <div class="shop">
             بسم اللہ آئرن سٹور
           </div>
 
-          <!-- CUSTOMER -->
-
           <div class="customer">
             Customer: ${customerName}
           </div>
-
-          <!-- DATE -->
 
           <div class="date">
             ${date}
@@ -616,59 +604,41 @@ export default function CustomerItemsPage() {
 
           <div class="line"></div>
 
-          <!-- =========================
-               ALL ITEMS
-          ========================= -->
-
           ${itemsHTML}
-
-          <!-- =========================
-               OVERALL SUMMARY
-          ========================= -->
 
           <div class="summary">
 
-            <!-- OVERALL TOTAL PRICE -->
-
             <div class="summary-row overall-total">
-  <span>
-    Over all Total Amount
-  </span>
+              <span>
+                Over all Total Amount
+              </span>
 
-  <span class="summary-value">
-    Rs. ${overallTotal.toLocaleString()}
-  </span>
-</div>
+              <span class="summary-value">
+                Rs. ${overallTotal.toLocaleString()}
+              </span>
+            </div>
 
-<!-- OVERALL PAID -->
+            <div class="summary-row overall-paid">
+              <span>
+                OverAll Paid Amount
+              </span>
 
-<div class="summary-row overall-paid">
-  <span>
-    OverAll Paid Amount
-  </span>
+              <span class="summary-value">
+                Rs. ${overallPaid.toLocaleString()}
+              </span>
+            </div>
 
-  <span class="summary-value">
-    Rs. ${overallPaid.toLocaleString()}
-  </span>
-</div>
+            <div class="summary-row overall-remaining">
+              <span>
+                Over All Remaining Amount
+              </span>
 
-<!-- OVERALL REMAINING -->
+              <span class="summary-value">
+                Rs. ${overallRemaining.toLocaleString()}
+              </span>
+            </div>
 
-<div class="summary-row overall-remaining">
-  <span>
-    Over All Remaining Amount
-  </span>
-
-  <span class="summary-value">
-    Rs. ${overallRemaining.toLocaleString()}
-  </span>
-</div>
-
-</div>
-
-          <!-- =========================
-               FOOTER
-          ========================= -->
+          </div>
 
           <div class="footer">
 
@@ -704,11 +674,7 @@ export default function CustomerItemsPage() {
 
               بسم اللہ آئرن سٹور
 
-              
-
               جمالپور نزد ماہر والا
-
-              
 
               پٹرول پمپ قائم پور روڈ
 
@@ -887,15 +853,23 @@ export default function CustomerItemsPage() {
                   <option value="بجری">
                     بجری
                   </option>
- <option value="ٹی یار75*75">
-                  ٹی یار75*75
+
+                  <option value="ٹی یار75*75">
+                    ٹی یار75*75
                   </option>
+
                   <option value=" ٹی یار70*70">
-                  ٹی یار70*70
+                    ٹی یار70*70
                   </option>
+
                   <option value="Bajri">
                     بجری
                   </option>
+
+                  <option value="amount Jama">
+                    amount Jama
+                  </option>
+
                 </select>
 
               </div>
@@ -1045,17 +1019,23 @@ export default function CustomerItemsPage() {
 
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[1050px] text-left">
+            <table className="w-full min-w-[1150px] text-left">
 
               <thead className="bg-slate-50">
 
                 <tr>
 
-                  <th className="px-5 py-4  font-semibold uppercase tracking-wide text-black text-sm">
+                  {/* DATE COLUMN ADDED */}
+
+                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Date
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold uppercase tracking-wide text-black text-sm">
                     Customer
                   </th>
 
-                  <th className="px-5 py-4 text-xs  font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Item
                   </th>
 
@@ -1076,7 +1056,7 @@ export default function CustomerItemsPage() {
                   </th>
 
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                   بقایا رقم
+                    بقایا رقم
                   </th>
 
                   <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1094,7 +1074,7 @@ export default function CustomerItemsPage() {
                   <tr>
 
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
                       Loading records...
@@ -1107,7 +1087,7 @@ export default function CustomerItemsPage() {
                   <tr>
 
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-12 text-center"
                     >
 
@@ -1153,12 +1133,11 @@ export default function CustomerItemsPage() {
                         <React.Fragment key={customerName}>
 
                           {/* CUSTOMER HEADER */}
-                          
 
                           <tr className="bg-slate-500">
 
                             <td
-                              colSpan={8}
+                              colSpan={9}
                               className="px-5 py-3"
                             >
 
@@ -1195,8 +1174,8 @@ export default function CustomerItemsPage() {
 
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px] uppercase text-white">
-                                      کل رقم
+                                    <p className="text-[10px]  text-white">
+                                      OverAll Total Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-white">
@@ -1208,8 +1187,8 @@ export default function CustomerItemsPage() {
 
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px] uppercase text-white">
-                                    تمام جمع رقم
+                                    <p className="text-[10px]  text-white">
+                                    OverAll Paid Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-gray-100">
@@ -1221,8 +1200,8 @@ export default function CustomerItemsPage() {
 
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px] uppercase text-white">
-                                      تمام بقایا رقم
+                                    <p className="text-[10px]  text-white">
+                                     OverAll Remaining Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-orange-400">
@@ -1233,23 +1212,37 @@ export default function CustomerItemsPage() {
                                   </div>
 
                                   {/* PRINT FULL */}
+{/* PRINT FULL */}
 
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handlePrintGroup(
-                                        customerName,
-                                        customerItems
-                                      )
-                                    }
-                                    className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
-                                  >
+<button
+  type="button"
+  onClick={() =>
+    handlePrintGroup(
+      customerName,
+      customerItems
+    )
+  }
+  className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
+>
+  <Printer size={16} />
+  Print Full
+</button>
 
-                                    <Printer size={16} />
+{/* DELETE FULL CUSTOMER GROUP */}
 
-                                    Print Full
-
-                                  </button>
+<button
+  type="button"
+  disabled={loading}
+  onClick={() =>
+    handleDeleteGroup(
+      customerName,
+      customerItems
+    )
+  }
+  className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  Delete All
+</button>
 
                                 </div>
 
@@ -1267,6 +1260,18 @@ export default function CustomerItemsPage() {
                               key={record.id}
                               className="transition hover:bg-slate-50"
                             >
+
+                              {/* DATE COLUMN ADDED */}
+
+                            <td className="px-5 py-4 text-sm text-slate-700 whitespace-nowrap">
+  {record.createdAt
+    ? new Date(record.createdAt).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : "-"}
+</td>
 
                               <td className="px-5 py-4">
 
