@@ -841,7 +841,13 @@ const handleDeleteGroup = async (
                   onChange={handleChange}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
-
+<option value="سیمنٹ DG">
+                    سیمنٹ DG
+                  </option>
+                                  
+<option value="سیمنٹ PK">
+                    سیمنٹ PK
+                  </option>
                   <option value="سریا moiz">
                     سریا moiz
                   </option>
