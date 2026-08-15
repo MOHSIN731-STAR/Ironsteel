@@ -48,6 +48,16 @@ export default function OrdersPage() {
     items: [] as Item[],
     total: 0,
   });
+  // ================= OVERALL ITEM COUNTING FILTER =================
+
+const [overallSelectedItem, setOverallSelectedItem] =
+  useState('');
+
+const [overallCountingPeriod, setOverallCountingPeriod] =
+  useState<'day' | 'weekly' | 'monthly'>('day');
+
+const [overallCountingDate, setOverallCountingDate] =
+  useState(new Date().toISOString().split('T')[0]);
 
   // ================= FETCH =================
 
@@ -193,39 +203,178 @@ export default function OrdersPage() {
 
   // ================= OVERALL ITEM COUNTING =================
 
-  const overallItemCounting =
-    filteredOrders.reduce(
-      (
-        acc: Record<string, number>,
-        order
-      ) => {
-        order.items.forEach((item) => {
-          const itemName = item.name.trim();
+  // ================= OVERALL ITEM LIST =================
 
-          if (!itemName) return;
+const overallAvailableItems = Array.from(
+  new Set(
+    orders.flatMap((order) =>
+      order.items
+        .map((item) => item.name.trim())
+        .filter(Boolean)
+    )
+  )
+).sort();
 
-          acc[itemName] =
-            (acc[itemName] || 0) +
-            Number(item.quantity);
-        });
+useEffect(() => {
+  if (
+    overallAvailableItems.length > 0 &&
+    !overallSelectedItem
+  ) {
+    setOverallSelectedItem(
+      overallAvailableItems[0]
+    );
+  }
+}, [
+  overallAvailableItems,
+  overallSelectedItem,
+]);
 
-        return acc;
-      },
-      {}
+// ================= OVERALL COUNTING DATE FILTER =================
+
+const overallCountingFilteredOrders =
+  orders.filter((order) => {
+    const orderDate = new Date(
+      order.createdAt
     );
 
-  // ================= OVERALL TOTAL =================
-
-  const overallTotalOrders =
-    filteredOrders.length;
-
-  const overallTotalAmount =
-    filteredOrders.reduce(
-      (sum, order) =>
-        sum + Number(order.total),
-      0
+    const selectedDate = new Date(
+      `${overallCountingDate}T00:00:00`
     );
 
+    // ================= DAILY =================
+
+    if (
+      overallCountingPeriod === 'day'
+    ) {
+      return (
+        orderDate.getFullYear() ===
+          selectedDate.getFullYear() &&
+        orderDate.getMonth() ===
+          selectedDate.getMonth() &&
+        orderDate.getDate() ===
+          selectedDate.getDate()
+      );
+    }
+
+    // ================= WEEKLY =================
+
+    if (
+      overallCountingPeriod === 'weekly'
+    ) {
+      const startOfWeek =
+        new Date(selectedDate);
+
+      const day =
+        startOfWeek.getDay();
+
+      // Monday = first day
+      const diff =
+        day === 0
+          ? -6
+          : 1 - day;
+
+      startOfWeek.setDate(
+        startOfWeek.getDate() + diff
+      );
+
+      startOfWeek.setHours(
+        0,
+        0,
+        0,
+        0
+      );
+
+      const endOfWeek =
+        new Date(startOfWeek);
+
+      endOfWeek.setDate(
+        endOfWeek.getDate() + 6
+      );
+
+      endOfWeek.setHours(
+        23,
+        59,
+        59,
+        999
+      );
+
+      return (
+        orderDate >= startOfWeek &&
+        orderDate <= endOfWeek
+      );
+    }
+
+    // ================= MONTHLY =================
+
+    if (
+      overallCountingPeriod === 'monthly'
+    ) {
+      return (
+        orderDate.getFullYear() ===
+          selectedDate.getFullYear() &&
+        orderDate.getMonth() ===
+          selectedDate.getMonth()
+      );
+    }
+
+    return false;
+  });
+
+// ================= OVERALL SELECTED ITEM COUNT =================
+
+const overallSelectedItemCount =
+  overallCountingFilteredOrders.reduce(
+    (sum, order) => {
+      const matchingItems =
+        order.items.filter(
+          (item) =>
+            item.name.trim() ===
+            overallSelectedItem
+        );
+
+      const quantity =
+        matchingItems.reduce(
+          (itemSum, item) =>
+            itemSum +
+            Number(item.quantity),
+          0
+        );
+
+      return sum + quantity;
+    },
+    0
+  );
+
+// ================= OVERALL SELECTED ITEM AMOUNT =================
+
+const overallSelectedItemAmount =
+  overallCountingFilteredOrders.reduce(
+    (sum, order) => {
+      const matchingItems =
+        order.items.filter(
+          (item) =>
+            item.name.trim() ===
+            overallSelectedItem
+        );
+
+      const amount =
+        matchingItems.reduce(
+          (itemSum, item) =>
+            itemSum +
+            Number(item.price) *
+              Number(item.quantity),
+          0
+        );
+
+      return sum + amount;
+    },
+    0
+  );
+
+// ================= OVERALL COUNTING ORDERS =================
+
+const overallCountingOrders =
+  overallCountingFilteredOrders.length;
   // ================= CLEAR FILTER =================
 
   const clearDateFilter = () => {
@@ -794,82 +943,209 @@ export default function OrdersPage() {
 
         {/* ================= OVERALL SUMMARY ================= */}
 
-        <div className="bg-white rounded-2xl shadow p-6 mb-6">
+    {/* ================= OVERALL ITEM COUNTING ================= */}
 
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-5">
+<div className="bg-white rounded-2xl shadow p-6 mb-6">
 
-            <h2 className="text-2xl font-bold">
-              Overall Item Counting
-            </h2>
+  {/* HEADER */}
 
-            <div className="flex flex-wrap gap-5">
+  <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-5">
 
-              <div className="font-semibold">
-                Total Orders:
-                <span className="text-indigo-600 ml-2">
-                  {overallTotalOrders}
-                </span>
-              </div>
+    <h2 className="text-2xl font-bold">
+      Overall Item Counting
+    </h2>
 
-              <div className="font-semibold">
-                Total Amount:
-                <span className="text-green-600 ml-2">
-                  Rs{' '}
-                  {overallTotalAmount.toLocaleString()}
-                </span>
-              </div>
+    <div className="font-semibold">
+      Total Orders:
 
-            </div>
+      <span className="text-indigo-600 ml-2">
+        {overallCountingOrders}
+      </span>
+    </div>
+
+  </div>
+
+  {/* ================= FILTERS ================= */}
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    {/* ITEM */}
+
+    <div>
+
+      <label className="block text-sm font-semibold mb-2">
+        Select Item
+      </label>
+
+      <select
+        value={overallSelectedItem}
+        onChange={(e) =>
+          setOverallSelectedItem(
+            e.target.value
+          )
+        }
+        className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+
+        <option value="">
+          Select Item
+        </option>
+
+        {overallAvailableItems.map(
+          (item) => (
+            <option
+              key={item}
+              value={item}
+            >
+              {item}
+            </option>
+          )
+        )}
+
+      </select>
+
+    </div>
+
+    {/* PERIOD */}
+
+    <div>
+
+      <label className="block text-sm font-semibold mb-2">
+        Counting Period
+      </label>
+
+      <select
+        value={overallCountingPeriod}
+        onChange={(e) =>
+          setOverallCountingPeriod(
+            e.target.value as
+              | 'day'
+              | 'weekly'
+              | 'monthly'
+          )
+        }
+        className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+
+        <option value="day">
+          Daily
+        </option>
+
+        <option value="weekly">
+          Weekly
+        </option>
+
+        <option value="monthly">
+          Monthly
+        </option>
+
+      </select>
+
+    </div>
+
+    {/* DATE */}
+
+    <div>
+
+      <label className="block text-sm font-semibold mb-2">
+        Select Date
+      </label>
+
+      <input
+        type="date"
+        value={overallCountingDate}
+        onChange={(e) =>
+          setOverallCountingDate(
+            e.target.value
+          )
+        }
+        className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+
+    </div>
+
+  </div>
+
+  {/* ================= COUNTING BOX ================= */}
+
+  {overallSelectedItem ? (
+
+    <div className="mt-5 border-2 border-indigo-500 rounded-2xl p-6 bg-indigo-50">
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+
+        {/* ITEM */}
+
+        <div>
+
+          <div className="text-sm text-gray-500 mb-1">
+            Selected Item
+          </div>
+
+          <div className="text-xl font-bold">
+            {overallSelectedItem}
+          </div>
+
+        </div>
+
+        {/* QUANTITY */}
+
+        <div className="text-center">
+
+          <div className="text-sm text-gray-500 mb-1">
+
+            {overallCountingPeriod ===
+            'day'
+              ? 'Daily Quantity'
+              : overallCountingPeriod ===
+                'weekly'
+              ? 'Weekly Quantity'
+              : 'Monthly Quantity'}
 
           </div>
 
-          {Object.keys(
-            overallItemCounting
-          ).length > 0 ? (
+          <div className="text-4xl font-bold text-indigo-600">
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {overallSelectedItemCount.toLocaleString()}
 
-              {Object.entries(
-                overallItemCounting
-              ).map(
-                ([
-                  itemName,
-                  quantity,
-                ]) => (
+          </div>
 
-                  <div
-                    key={itemName}
-                    className="border rounded-xl p-4 bg-gray-50"
-                  >
-
-                    <div className="font-bold text-sm min-h-[40px]">
-                      {itemName}
-                    </div>
-
-                    <div className="text-2xl font-bold text-indigo-600 mt-2">
-                      {quantity}
-                    </div>
-
-                    <div className="text-xs text-gray-500">
-                      Total Quantity
-                    </div>
-
-                  </div>
-
-                )
-              )}
-
-            </div>
-
-          ) : (
-
-            <div className="text-center py-5 text-gray-500">
-              No item counting available
-            </div>
-
-          )}
+          <div className="text-sm text-gray-500 mt-1">
+            Quantity
+          </div>
 
         </div>
+
+        {/* AMOUNT */}
+
+        <div className="text-center md:text-right">
+
+          <div className="text-sm text-gray-500 mb-1">
+            Total Amount
+          </div>
+
+          <div className="text-2xl font-bold text-green-600">
+
+            Rs.{' '}
+            {overallSelectedItemAmount.toLocaleString()}
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  ) : (
+
+    <div className="mt-5 text-center text-gray-500 border rounded-2xl p-8">
+      Please select an item
+    </div>
+
+  )}
+
+</div>
 
         {/* ================= ORDERS ================= */}
 

@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Edit, Trash2, RefreshCw, X, Printer } from 'lucide-react';
+import {
+  Edit,
+  Trash2,
+  RefreshCw,
+  X,
+  Printer,
+} from 'lucide-react';
 
 interface Item {
   name: string;
@@ -29,6 +35,17 @@ export default function WalkingOrdersPage() {
 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  // ================= ITEM COUNTING =================
+
+  const [selectedItem, setSelectedItem] = useState('');
+  const [countingPeriod, setCountingPeriod] = useState<
+    'day' | 'weekly' | 'monthly'
+  >('day');
+
+  const [countingDate, setCountingDate] = useState(
+    new Date().toISOString().split('T')[0]
+  );
 
   const [hoveredOrder, setHoveredOrder] =
     useState<WalkingOrder | null>(null);
@@ -71,13 +88,17 @@ export default function WalkingOrdersPage() {
       ) {
         ordersArray = data.walkingOrders;
       } else {
-        throw new Error('Invalid response format from API');
+        throw new Error(
+          'Invalid response format from API'
+        );
       }
 
       setOrders(ordersArray);
     } catch (err: any) {
       console.error('Fetch Error:', err);
-      setError(err.message || 'Failed to load orders');
+      setError(
+        err.message || 'Failed to load orders'
+      );
     } finally {
       setLoading(false);
     }
@@ -139,6 +160,7 @@ export default function WalkingOrdersPage() {
       }
     } catch (error) {
       console.error('Delete Error:', error);
+
       alert(
         'Something went wrong while deleting'
       );
@@ -207,6 +229,7 @@ export default function WalkingOrdersPage() {
 
       if (res.ok && data.success) {
         setEditingOrder(null);
+
         fetchOrders();
 
         alert(
@@ -219,7 +242,10 @@ export default function WalkingOrdersPage() {
       }
     } catch (error) {
       console.error(error);
-      alert('Update request failed');
+
+      alert(
+        'Update request failed'
+      );
     }
   };
 
@@ -276,7 +302,10 @@ export default function WalkingOrdersPage() {
       }
     } catch (err) {
       console.error(err);
-      alert('Something went wrong');
+
+      alert(
+        'Something went wrong'
+      );
     }
   };
 
@@ -297,6 +326,7 @@ export default function WalkingOrdersPage() {
       alert(
         'Please allow popups for printing.'
       );
+
       return;
     }
 
@@ -314,12 +344,15 @@ export default function WalkingOrdersPage() {
       .map(
         (item) => `
           <div class="bill-row">
+
             <span class="item-name">
               ${item.name}
             </span>
 
             <span class="price">
-              ${Number(item.price).toLocaleString()}
+              ${Number(
+                item.price
+              ).toLocaleString()}
             </span>
 
             <span class="qty">
@@ -332,6 +365,7 @@ export default function WalkingOrdersPage() {
                 Number(item.quantity)
               ).toLocaleString()}
             </span>
+
           </div>
         `
       )
@@ -339,11 +373,17 @@ export default function WalkingOrdersPage() {
 
     printWindow.document.write(`
       <!DOCTYPE html>
+
       <html>
+
         <head>
-          <title>Walking Order #${order.id}</title>
+
+          <title>
+            Walking Order #${order.id}
+          </title>
 
           <style>
+
             @page {
               size: 80mm auto;
               margin: 0;
@@ -449,7 +489,7 @@ export default function WalkingOrdersPage() {
             }
 
             .shop-number {
-              font-weight: 25px;
+              font-weight: bold;
               margin-bottom: 5px;
             }
 
@@ -463,7 +503,9 @@ export default function WalkingOrdersPage() {
               font-size: 14px;
               font-weight: bold;
             }
+
           </style>
+
         </head>
 
         <body>
@@ -475,6 +517,7 @@ export default function WalkingOrdersPage() {
             </div>
 
             <div class="order-info">
+
               <div>
                 <strong>Name:</strong>
                 ${order.customerName}
@@ -484,9 +527,11 @@ export default function WalkingOrdersPage() {
                 <strong>Date:</strong>
                 ${formattedDate}
               </div>
+
             </div>
 
             <div class="table-header">
+
               <span class="item-name">
                 Item
               </span>
@@ -502,11 +547,13 @@ export default function WalkingOrdersPage() {
               <span class="total">
                 Total
               </span>
+
             </div>
 
             ${itemsHTML}
 
             <div class="grand-total">
+
               <span>
                 Grand Total
               </span>
@@ -516,23 +563,21 @@ export default function WalkingOrdersPage() {
                   order.total
                 ).toLocaleString()}
               </span>
+
             </div>
 
-            <div class="flex flex-2 justify-between mt-4">
-              <div class="flex flex-row gap-2">
+            <div class="footer">
 
-                <div class="shop-number">
-                  Shop Number
-                </div>
+              <div class="shop-number">
+                Shop Number
+              </div>
 
-                <div>
-                  0307-1038571
-                </div>
+              <div>
+                0307-1038571
+              </div>
 
-                <div class="sign">
-                  Sign: _____________
-                </div>
-
+              <div class="sign">
+                Sign: _____________
               </div>
 
               <div class="address">
@@ -546,6 +591,7 @@ export default function WalkingOrdersPage() {
           </div>
 
         </body>
+
       </html>
     `);
 
@@ -626,28 +672,195 @@ export default function WalkingOrdersPage() {
         )
     );
 
-  // ================= ITEM COUNTING =================
+  // ================= SELECTED ITEM LIST =================
 
-  const itemCounting =
-    filteredOrders.reduce(
-      (
-        acc: Record<string, number>,
-        order
-      ) => {
-        order.items.forEach((item) => {
-          const itemName =
-            item.name.trim();
+  const availableItems = Array.from(
+    new Set(
+      orders.flatMap((order) =>
+        order.items
+          .map((item) => item.name.trim())
+          .filter(Boolean)
+      )
+    )
+  ).sort();
 
-          if (!itemName) return;
+  // Automatically select first item
+  useEffect(() => {
+    if (
+      availableItems.length > 0 &&
+      !selectedItem
+    ) {
+      setSelectedItem(
+        availableItems[0]
+      );
+    }
+  }, [
+    availableItems,
+    selectedItem,
+  ]);
 
-          acc[itemName] =
-            (acc[itemName] || 0) +
-            Number(item.quantity);
-        });
+  // ================= COUNTING DATE FILTER =================
 
-        return acc;
+  const countingFilteredOrders =
+    orders.filter((order) => {
+      const orderDate = new Date(
+        order.createdAt
+      );
+
+      const selectedDate =
+        new Date(
+          `${countingDate}T00:00:00`
+        );
+
+      // ================= DAILY =================
+
+      if (
+        countingPeriod === 'day'
+      ) {
+        return (
+          orderDate.getFullYear() ===
+            selectedDate.getFullYear() &&
+          orderDate.getMonth() ===
+            selectedDate.getMonth() &&
+          orderDate.getDate() ===
+            selectedDate.getDate()
+        );
+      }
+
+      // ================= WEEKLY =================
+
+      if (
+        countingPeriod === 'weekly'
+      ) {
+        const startOfWeek =
+          new Date(selectedDate);
+
+        const day =
+          startOfWeek.getDay();
+
+        // Monday = first day
+        const diff =
+          day === 0
+            ? -6
+            : 1 - day;
+
+        startOfWeek.setDate(
+          startOfWeek.getDate() +
+            diff
+        );
+
+        startOfWeek.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        const endOfWeek =
+          new Date(startOfWeek);
+
+        endOfWeek.setDate(
+          endOfWeek.getDate() +
+            6
+        );
+
+        endOfWeek.setHours(
+          23,
+          59,
+          59,
+          999
+        );
+
+        return (
+          orderDate >=
+            startOfWeek &&
+          orderDate <=
+            endOfWeek
+        );
+      }
+
+      // ================= MONTHLY =================
+
+      if (
+        countingPeriod === 'monthly'
+      ) {
+        return (
+          orderDate.getFullYear() ===
+            selectedDate.getFullYear() &&
+          orderDate.getMonth() ===
+            selectedDate.getMonth()
+        );
+      }
+
+      return false;
+    });
+
+  // ================= SELECTED ITEM COUNT =================
+
+  const selectedItemCount =
+    countingFilteredOrders.reduce(
+      (sum, order) => {
+        const matchingItems =
+          order.items.filter(
+            (item) =>
+              item.name.trim() ===
+              selectedItem
+          );
+
+        const itemQuantity =
+          matchingItems.reduce(
+            (
+              itemSum,
+              item
+            ) =>
+              itemSum +
+              Number(
+                item.quantity
+              ),
+            0
+          );
+
+        return (
+          sum + itemQuantity
+        );
       },
-      {}
+      0
+    );
+
+  // ================= COUNTING ORDERS =================
+
+  const countingOrders =
+    countingFilteredOrders.length;
+
+  // ================= COUNTING AMOUNT =================
+
+  const countingAmount =
+    countingFilteredOrders.reduce(
+      (sum, order) => {
+        const matchingItems =
+          order.items.filter(
+            (item) =>
+              item.name.trim() ===
+              selectedItem
+          );
+
+        const itemAmount =
+          matchingItems.reduce(
+            (
+              itemSum,
+              item
+            ) =>
+              itemSum +
+              Number(item.price) *
+                Number(item.quantity),
+            0
+          );
+
+        return (
+          sum + itemAmount
+        );
+      },
+      0
     );
 
   // ================= FILTERED TOTAL =================
@@ -676,7 +889,7 @@ export default function WalkingOrdersPage() {
 
       <div className="max-w-7xl mx-auto">
 
-        {/* HEADER */}
+        {/* ================= HEADER ================= */}
 
         <div className="flex justify-between items-center mb-6">
 
@@ -695,7 +908,7 @@ export default function WalkingOrdersPage() {
 
         </div>
 
-        {/* SEARCH */}
+        {/* ================= SEARCH ================= */}
 
         <input
           className="border p-3 w-full mb-5 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -769,81 +982,219 @@ export default function WalkingOrdersPage() {
 
         </div>
 
-        {/* ================= COUNTING ================= */}
+        {/* ================================================= */}
+        {/* ================= ITEM COUNTING ================= */}
+        {/* ================================================= */}
 
         <div className="bg-white rounded-2xl shadow p-5 mb-6">
 
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-5">
+          {/* HEADER */}
+
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
 
             <h2 className="text-xl font-bold">
               Item Counting
             </h2>
 
-            <div className="flex gap-5 text-sm">
+            <div className="text-sm font-semibold">
 
-              <span className="font-semibold">
-                Total Orders:
-                <span className="text-blue-600 ml-1">
-                  {totalOrders}
-                </span>
-              </span>
+              Total Orders:
 
-              <span className="font-semibold">
-                Total Amount:
-                <span className="text-green-600 ml-1">
-                  Rs.{' '}
-                  {filteredGrandTotal.toLocaleString()}
-                </span>
+              <span className="text-blue-600 ml-1">
+                {countingOrders}
               </span>
 
             </div>
 
           </div>
 
-          {Object.keys(itemCounting).length >
-          0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* FILTERS */}
 
-              {Object.entries(
-                itemCounting
-              ).map(
-                ([
-                  itemName,
-                  quantity,
-                ]) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                  <div
-                    key={itemName}
-                    className="border rounded-xl p-4 bg-gray-50 hover:shadow-md transition"
-                  >
+            {/* ITEM DROPDOWN */}
 
-                    <div className="font-bold text-sm min-h-[40px]">
-                      {itemName}
+            <div>
+
+              <label className="block text-sm font-semibold mb-2">
+                Select Item
+              </label>
+
+              <select
+                value={selectedItem}
+                onChange={(e) =>
+                  setSelectedItem(
+                    e.target.value
+                  )
+                }
+                className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+
+                <option value="">
+                  Select Item
+                </option>
+
+                {availableItems.map(
+                  (item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+            {/* PERIOD DROPDOWN */}
+
+            <div>
+
+              <label className="block text-sm font-semibold mb-2">
+                Counting Period
+              </label>
+
+              <select
+                value={countingPeriod}
+                onChange={(e) =>
+                  setCountingPeriod(
+                    e.target.value as
+                      | 'day'
+                      | 'weekly'
+                      | 'monthly'
+                  )
+                }
+                className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+
+                <option value="day">
+                  Daily
+                </option>
+
+                <option value="weekly">
+                  Weekly
+                </option>
+
+                <option value="monthly">
+                  Monthly
+                </option>
+
+              </select>
+
+            </div>
+
+            {/* COUNTING DATE */}
+
+            <div>
+
+              <label className="block text-sm font-semibold mb-2">
+                Select Date
+              </label>
+
+              <input
+                type="date"
+                value={countingDate}
+                onChange={(e) =>
+                  setCountingDate(
+                    e.target.value
+                  )
+                }
+                className="border p-3 w-full rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+            </div>
+
+          </div>
+
+          {/* COUNTING BOX */}
+
+          <div className="mt-5">
+
+            {selectedItem ? (
+
+              <div className="border-2 border-blue-500 rounded-2xl p-6 bg-blue-50">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+
+                  {/* ITEM */}
+
+                  <div>
+
+                    <div className="text-sm text-gray-500 mb-1">
+                      Selected Item
                     </div>
 
-                    <div className="text-2xl font-bold text-blue-600 mt-2">
-                      {quantity}
+                    <div className="text-xl font-bold">
+                      {selectedItem}
                     </div>
 
-                    <div className="text-xs text-gray-500">
+                  </div>
+
+                  {/* QUANTITY */}
+
+                  <div className="text-center">
+
+                    <div className="text-sm text-gray-500 mb-1">
+
+                      {countingPeriod ===
+                      'day'
+                        ? 'Daily Quantity'
+                        : countingPeriod ===
+                          'weekly'
+                        ? 'Weekly Quantity'
+                        : 'Monthly Quantity'}
+
+                    </div>
+
+                    <div className="text-4xl font-bold text-blue-600">
+
+                      {selectedItemCount.toLocaleString()}
+
+                    </div>
+
+                    <div className="text-sm text-gray-500 mt-1">
                       Quantity
                     </div>
 
                   </div>
 
-                )
-              )}
+                  {/* AMOUNT */}
 
-            </div>
-          ) : (
-            <div className="text-center text-gray-500 py-5">
-              No items found for selected date range
-            </div>
-          )}
+                  <div className="text-center md:text-right">
+
+                    <div className="text-sm text-gray-500 mb-1">
+                      Total Amount
+                    </div>
+
+                    <div className="text-2xl font-bold text-green-600">
+
+                      Rs.{' '}
+                      {countingAmount.toLocaleString()}
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              <div className="text-center text-gray-500 border rounded-2xl p-8">
+                Please select an item
+              </div>
+
+            )}
+
+          </div>
 
         </div>
 
-        {/* ERROR */}
+        {/* ================= ERROR ================= */}
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4">
@@ -851,7 +1202,7 @@ export default function WalkingOrdersPage() {
           </div>
         )}
 
-        {/* TABLE */}
+        {/* ================= TABLE ================= */}
 
         <div className="bg-white rounded-2xl shadow overflow-hidden">
 
@@ -958,6 +1309,7 @@ export default function WalkingOrdersPage() {
                           }
                           onClick={(e) => {
                             e.stopPropagation();
+
                             handleEdit(order);
                           }}
                           className="text-blue-600 hover:scale-110 transition"
@@ -979,6 +1331,7 @@ export default function WalkingOrdersPage() {
                           }
                           onClick={(e) => {
                             e.stopPropagation();
+
                             handleDelete(
                               order.id
                             );
@@ -1006,6 +1359,7 @@ export default function WalkingOrdersPage() {
                           }
                           onClick={(e) => {
                             e.stopPropagation();
+
                             handlePrint(order);
                           }}
                           className="text-green-600 hover:scale-110 transition"
@@ -1049,7 +1403,9 @@ export default function WalkingOrdersPage() {
 
       </div>
 
-      {/* ================= TOOLTIP / ORDER ITEMS ================= */}
+      {/* ================================================= */}
+      {/* ================= ORDER ITEMS POPUP ============= */}
+      {/* ================================================= */}
 
       {hoveredOrder && (
 
@@ -1102,8 +1458,10 @@ export default function WalkingOrdersPage() {
                         </div>
 
                         <div className="text-xs text-gray-500">
+
                           {item.quantity} × Rs.{' '}
                           {item.price}
+
                         </div>
 
                       </div>
@@ -1111,11 +1469,13 @@ export default function WalkingOrdersPage() {
                       <div className="flex items-center gap-3">
 
                         <div className="font-semibold">
+
                           Rs.{' '}
                           {Number(
                             item.quantity *
                               item.price
                           ).toLocaleString()}
+
                         </div>
 
                         <button
@@ -1148,15 +1508,17 @@ export default function WalkingOrdersPage() {
                 </span>
 
                 <span className="text-green-600">
+
                   Rs.{' '}
                   {Number(
                     hoveredOrder.total
                   ).toLocaleString()}
+
                 </span>
 
               </div>
 
-              {/* PRINT FROM POPUP */}
+              {/* PRINT */}
 
               <button
                 onClick={() =>
@@ -1180,7 +1542,9 @@ export default function WalkingOrdersPage() {
 
       )}
 
-      {/* ================= EDIT MODAL ================= */}
+      {/* ================================================= */}
+      {/* ================= EDIT MODAL ==================== */}
+      {/* ================================================= */}
 
       {editingOrder && (
 
