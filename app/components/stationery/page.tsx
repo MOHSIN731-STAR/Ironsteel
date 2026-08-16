@@ -12,7 +12,9 @@ const products: Product[] = [
   { id: 4, name: "پلاسٹک جالی",  image: "/plastic.png" },
    { id: 5, name: "سٹیل جالی", image:"/steel.png" },
   { id: 6, name: "سلوشن" , image:"/saloion.png" },
-  { id: 7, name: "ساکٹ", image:"/sakat.png" }
+  { id: 7, name: "ساکٹ", image:"/sakat.png" },
+  { id: 8, name: "ال بو", image:"/al.png" },
+  { id: 9, name: "ٹی", image:"/T.png" },
 ];
 
 export default function Products() {

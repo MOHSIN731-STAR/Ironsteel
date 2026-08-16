@@ -31,6 +31,10 @@ model CustomerItem {
   totalPrice    Float
   paidPrice     Float    @default(0)
   remainingPrice Float   @default(0)
+  overallTotal      Float?
+  overallPaid       Float?
+  overallRemaining  Float?
+
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

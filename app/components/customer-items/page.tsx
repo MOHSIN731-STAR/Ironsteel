@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Printer } from "lucide-react";
+import { Printer, X } from "lucide-react";
 
 interface CustomerItem {
   id: number;
@@ -12,8 +12,17 @@ interface CustomerItem {
   totalPrice: number;
   paidPrice: number;
   remainingPrice: number;
-   createdAt: string;
+  overallTotal?: number | null;
+  overallPaid?: number | null;
+  overallRemaining?: number | null;
+  createdAt: string;
   updatedAt: string;
+}
+
+interface OverallModal {
+  customerName: string;
+  total: string;
+  paid: string;
 }
 
 export default function CustomerItemsPage() {
@@ -22,34 +31,59 @@ export default function CustomerItemsPage() {
   const [fetching, setFetching] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
 
+  // ======================================================
+  // OVERALL UPDATE MODAL
+  // ======================================================
+
+  const [showOverallModal, setShowOverallModal] =
+    useState(false);
+
+  const [overallModal, setOverallModal] =
+    useState<OverallModal>({
+      customerName: "",
+      total: "",
+      paid: "",
+    });
+
+  // ======================================================
+  // FORM
+  // ======================================================
+
   const [form, setForm] = useState({
     customerName: "",
-    item: "Cement",
+    item: "سیمنٹ DG",
     quantity: "",
     price: "",
     paidPrice: "",
   });
 
-  // =========================
+  // ======================================================
   // FORM CALCULATIONS
-  // =========================
+  // ======================================================
 
   const quantity = Number(form.quantity) || 0;
   const price = Number(form.price) || 0;
   const paidPrice = Number(form.paidPrice) || 0;
 
   const totalPrice = quantity * price;
-  const remainingPrice = totalPrice - paidPrice;
 
-  // =========================
+  const remainingPrice =
+    totalPrice - paidPrice;
+
+  // ======================================================
   // GET
-  // =========================
+  // ======================================================
 
   const fetchItems = async () => {
     try {
       setFetching(true);
 
-      const response = await fetch("/api/customer-items");
+      const response = await fetch(
+        "/api/customer-items",
+        {
+          cache: "no-store",
+        }
+      );
 
       const result = await response.json();
 
@@ -67,31 +101,96 @@ export default function CustomerItemsPage() {
     fetchItems();
   }, []);
 
-  // =========================
+  // ======================================================
   // GROUP CUSTOMERS
-  // =========================
+  // ======================================================
 
-  const groupedItems = items.reduce<Record<string, CustomerItem[]>>(
-    (groups, item) => {
-      const customer = item.customerName.trim();
+  const groupedItems =
+    items.reduce<Record<string, CustomerItem[]>>(
+      (groups, item) => {
+        const customer =
+          item.customerName.trim();
 
-      if (!groups[customer]) {
-        groups[customer] = [];
-      }
+        if (!groups[customer]) {
+          groups[customer] = [];
+        }
 
-      groups[customer].push(item);
+        groups[customer].push(item);
 
-      return groups;
-    },
-    {}
-  );
+        return groups;
+      },
+      {}
+    );
 
-  // =========================
+  // ======================================================
+  // GET CUSTOMER OVERALL
+  // ======================================================
+
+  const getCustomerOverall = (
+    customerItems: CustomerItem[]
+  ) => {
+    const savedOverall =
+      customerItems.find(
+        (item) =>
+          item.overallTotal !== null &&
+          item.overallTotal !== undefined
+      );
+
+    if (savedOverall) {
+      return {
+        total:
+          Number(
+            savedOverall.overallTotal
+          ) || 0,
+
+        paid:
+          Number(
+            savedOverall.overallPaid
+          ) || 0,
+
+        remaining:
+          Number(
+            savedOverall.overallRemaining
+          ) ||
+          (
+            Number(
+              savedOverall.overallTotal
+            ) -
+            Number(
+              savedOverall.overallPaid
+            )
+          ),
+      };
+    }
+
+    // Old records without saved overall
+    const total = customerItems.reduce(
+      (sum, item) =>
+        sum + Number(item.totalPrice),
+      0
+    );
+
+    const paid = customerItems.reduce(
+      (sum, item) =>
+        sum + Number(item.paidPrice),
+      0
+    );
+
+    return {
+      total,
+      paid,
+      remaining: total - paid,
+    };
+  };
+
+  // ======================================================
   // FORM CHANGE
-  // =========================
+  // ======================================================
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement
+    >
   ) => {
     setForm({
       ...form,
@@ -99,11 +198,143 @@ export default function CustomerItemsPage() {
     });
   };
 
-  // =========================
-  // POST / UPDATE
-  // =========================
+  // ======================================================
+  // UPDATE OVERALL MODAL CHANGE
+  // ======================================================
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOverallChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.target;
+
+    setOverallModal((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // ======================================================
+  // OPEN OVERALL MODAL
+  // ======================================================
+
+  const openOverallModal = (
+    customerName: string,
+    customerItems: CustomerItem[]
+  ) => {
+    const overall =
+      getCustomerOverall(customerItems);
+
+    setOverallModal({
+      customerName,
+      total: String(overall.total),
+      paid: String(overall.paid),
+    });
+
+    setShowOverallModal(true);
+  };
+
+  // ======================================================
+  // OVERALL MODAL CALCULATION
+  // ======================================================
+
+  const modalTotal =
+    Number(overallModal.total) || 0;
+
+  const modalPaid =
+    Number(overallModal.paid) || 0;
+
+  const modalRemaining =
+    modalTotal - modalPaid;
+
+  // ======================================================
+  // SAVE OVERALL PRICE
+  // ======================================================
+
+  const handleUpdateOverall = async () => {
+    if (!overallModal.customerName) {
+      alert("Customer name is required");
+      return;
+    }
+
+    if (modalTotal < 0) {
+      alert("Overall total cannot be negative");
+      return;
+    }
+
+    if (modalPaid < 0) {
+      alert("Overall paid cannot be negative");
+      return;
+    }
+
+    if (modalPaid > modalTotal) {
+      alert(
+        "Overall paid cannot be greater than overall total"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        "/api/customer-items",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            customerName:
+              overallModal.customerName,
+
+            overallTotal: modalTotal,
+
+            overallPaid: modalPaid,
+
+            overallRemaining:
+              modalRemaining,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(
+          result.message ||
+            "Failed to update overall price"
+        );
+        return;
+      }
+
+      setShowOverallModal(false);
+
+      await fetchItems();
+
+      alert(
+        "Overall price updated successfully"
+      );
+    } catch (error) {
+      console.error(
+        "Overall update error:",
+        error
+      );
+
+      alert(
+        "Failed to update overall price"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ======================================================
+  // POST / UPDATE ITEM
+  // ======================================================
+
+  const handleSubmit = async (
+    e: React.FormEvent
+  ) => {
     e.preventDefault();
 
     if (!form.customerName.trim()) {
@@ -111,72 +342,202 @@ export default function CustomerItemsPage() {
       return;
     }
 
-    if (!form.quantity || Number(form.quantity) <= 0) {
+    if (
+      !form.quantity ||
+      Number(form.quantity) <= 0
+    ) {
       alert("Enter valid quantity");
       return;
     }
 
-    if (!form.price || Number(form.price) <= 0) {
+    if (
+      !form.price ||
+      Number(form.price) <= 0
+    ) {
       alert("Enter valid price");
       return;
     }
 
     if (paidPrice > totalPrice) {
-      alert("Paid amount cannot be greater than total price");
+      alert(
+        "Paid amount cannot be greater than total price"
+      );
       return;
     }
 
     try {
       setLoading(true);
 
+      const customerName =
+        form.customerName.trim();
+
+      // ==================================================
+      // IMPORTANT:
+      // BEFORE ADDING NEW RECORD, GET CURRENT OVERALL
+      // ==================================================
+
+      const existingCustomerItems =
+        groupedItems[customerName] || [];
+
+      const oldOverall =
+        existingCustomerItems.length > 0
+          ? getCustomerOverall(
+              existingCustomerItems
+            )
+          : {
+              total: 0,
+              paid: 0,
+              remaining: 0,
+            };
+
+      // ==================================================
+      // POST / PUT
+      // ==================================================
+
       const body = {
-        ...(editingId && { id: editingId }),
-        customerName: form.customerName.trim(),
+        ...(editingId && {
+          id: editingId,
+        }),
+
+        customerName,
+
         item: form.item,
-        quantity: Number(form.quantity),
-        price: Number(form.price),
-        paidPrice: Number(form.paidPrice) || 0,
+
+        quantity:
+          Number(form.quantity),
+
+        price:
+          Number(form.price),
+
+        paidPrice:
+          Number(form.paidPrice) || 0,
       };
 
-      const response = await fetch("/api/customer-items", {
-        method: editingId ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        "/api/customer-items",
+        {
+          method: editingId
+            ? "PUT"
+            : "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify(body),
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        alert(result.message || "Something went wrong");
+        alert(
+          result.message ||
+            "Something went wrong"
+        );
         return;
+      }
+
+      // ==================================================
+      // NEW RECORD
+      // ADD NEW PRICE TO SAVED UPDATED OVERALL
+      // ==================================================
+
+      if (!editingId) {
+        const newOverallTotal =
+          oldOverall.total +
+          totalPrice;
+
+        const newOverallPaid =
+          oldOverall.paid +
+          paidPrice;
+
+        const newOverallRemaining =
+          newOverallTotal -
+          newOverallPaid;
+
+        // ================================================
+        // SAVE NEW OVERALL INTO DATABASE
+        // ================================================
+
+        const overallResponse =
+          await fetch(
+            "/api/customer-items",
+            {
+              method: "PATCH",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+                customerName,
+
+                overallTotal:
+                  newOverallTotal,
+
+                overallPaid:
+                  newOverallPaid,
+
+                overallRemaining:
+                  newOverallRemaining,
+              }),
+            }
+          );
+
+        const overallResult =
+          await overallResponse.json();
+
+        if (
+          !overallResponse.ok ||
+          !overallResult.success
+        ) {
+          console.error(
+            "Overall update failed:",
+            overallResult
+          );
+        }
       }
 
       resetForm();
 
       await fetchItems();
     } catch (error) {
-      console.error("Submit error:", error);
+      console.error(
+        "Submit error:",
+        error
+      );
+
       alert("Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
-  // =========================
+  // ======================================================
   // EDIT
-  // =========================
+  // ======================================================
 
-  const handleEdit = (record: CustomerItem) => {
+  const handleEdit = (
+    record: CustomerItem
+  ) => {
     setEditingId(record.id);
 
     setForm({
-      customerName: record.customerName,
+      customerName:
+        record.customerName,
+
       item: record.item,
-      quantity: String(record.quantity),
-      price: String(record.price),
-      paidPrice: String(record.paidPrice),
+
+      quantity:
+        String(record.quantity),
+
+      price:
+        String(record.price),
+
+      paidPrice:
+        String(record.paidPrice),
     });
 
     window.scrollTo({
@@ -185,165 +546,218 @@ export default function CustomerItemsPage() {
     });
   };
 
-  // =========================
+  // ======================================================
   // DELETE
-  // =========================
+  // ======================================================
 
-  const handleDelete = async (id: number) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this record?"
-    );
+  const handleDelete = async (
+    id: number
+  ) => {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this record?"
+      );
 
     if (!confirmed) return;
 
     try {
-      const response = await fetch("/api/customer-items", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id }),
-      });
+      setLoading(true);
 
-      const result = await response.json();
+      const response = await fetch(
+        "/api/customer-items",
+        {
+          method: "DELETE",
 
-      if (!response.ok || !result.success) {
-        alert(result.message || "Delete failed");
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            id,
+          }),
+        }
+      );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        alert(
+          result.message ||
+            "Delete failed"
+        );
         return;
       }
 
       await fetchItems();
     } catch (error) {
-      console.error("Delete error:", error);
+      console.error(
+        "Delete error:",
+        error
+      );
+
       alert("Delete failed");
+    } finally {
+      setLoading(false);
     }
   };
-  // =========================
-// DELETE FULL CUSTOMER GROUP
-// =========================
 
-const handleDeleteGroup = async (
-  customerName: string,
-  customerItems: CustomerItem[]
-) => {
-  const confirmed = window.confirm(
-    `Are you sure you want to delete ALL ${customerItems.length} records of "${customerName}"?`
-  );
+  // ======================================================
+  // DELETE FULL CUSTOMER GROUP
+  // ======================================================
 
-  if (!confirmed) return;
+  const handleDeleteGroup = async (
+    customerName: string,
+    customerItems: CustomerItem[]
+  ) => {
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete ALL ${customerItems.length} records of "${customerName}"?`
+      );
 
-  try {
-    setLoading(true);
+    if (!confirmed) return;
 
-    // Delete all customer records
-    await Promise.all(
-      customerItems.map(async (record) => {
-        const response = await fetch("/api/customer-items", {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: record.id,
-          }),
-        });
+    try {
+      setLoading(true);
 
-        const result = await response.json();
+      await Promise.all(
+        customerItems.map(
+          async (record) => {
+            const response =
+              await fetch(
+                "/api/customer-items",
+                {
+                  method: "DELETE",
 
-        if (!response.ok || !result.success) {
-          throw new Error(
-            result.message || `Failed to delete record ${record.id}`
-          );
-        }
-      })
-    );
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
 
-    // Refresh table
-    await fetchItems();
+                  body: JSON.stringify({
+                    id: record.id,
+                  }),
+                }
+              );
 
-  } catch (error) {
-    console.error("Group delete error:", error);
-    alert("Some records could not be deleted.");
-  } finally {
-    setLoading(false);
-  }
-};
+            const result =
+              await response.json();
 
-  // =========================
+            if (
+              !response.ok ||
+              !result.success
+            ) {
+              throw new Error(
+                result.message ||
+                  `Failed to delete record ${record.id}`
+              );
+            }
+          }
+        )
+      );
+
+      await fetchItems();
+    } catch (error) {
+      console.error(
+        "Group delete error:",
+        error
+      );
+
+      alert(
+        "Some records could not be deleted."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ======================================================
   // RESET
-  // =========================
+  // ======================================================
 
   const resetForm = () => {
     setEditingId(null);
 
     setForm({
       customerName: "",
-      item: "Cement",
+      item: "سیمنٹ DG",
       quantity: "",
       price: "",
       paidPrice: "",
     });
   };
 
-  // =========================
+  // ======================================================
   // PRINT FULL CUSTOMER
-  // =========================
+  // ======================================================
 
   const handlePrintGroup = (
     customerName: string,
     customerItems: CustomerItem[]
   ) => {
-    const printWindow = window.open(
-      "",
-      "_blank",
-      "width=400,height=700"
-    );
+    const printWindow =
+      window.open(
+        "",
+        "_blank",
+        "width=400,height=700"
+      );
 
     if (!printWindow) {
-      alert("Please allow popups for printing.");
+      alert(
+        "Please allow popups for printing."
+      );
+
       return;
     }
 
-    // =========================
-    // OVERALL TOTALS
-    // =========================
+    // ==================================================
+    // USE SAVED OVERALL
+    // ==================================================
 
-    const overallTotal = customerItems.reduce(
-      (sum, item) => sum + Number(item.totalPrice),
-      0
-    );
+    const overall =
+      getCustomerOverall(
+        customerItems
+      );
 
-    const overallPaid = customerItems.reduce(
-      (sum, item) => sum + Number(item.paidPrice),
-      0
-    );
+    const overallTotal =
+      overall.total;
 
-    const overallRemaining = customerItems.reduce(
-      (sum, item) => sum + Number(item.remainingPrice),
-      0
-    );
+    const overallPaid =
+      overall.paid;
 
-    // =========================
+    const overallRemaining =
+      overall.remaining;
+
+    // ==================================================
     // DATE
-    // =========================
+    // ==================================================
 
-    const date = new Date().toLocaleDateString("en-GB", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    const date =
+      new Date().toLocaleDateString(
+        "en-GB",
+        {
+          weekday: "long",
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }
+      );
 
-    // =========================
+    // ==================================================
     // ITEMS HTML
-    // =========================
+    // ==================================================
 
-    const itemsHTML = customerItems
-      .map(
-        (record) => `
-      <div class="item-box text-center">
+    const itemsHTML =
+      customerItems
+        .map(
+          (record) => `
+      <div class="item-box">
 
-        <div class="item-title text-center">
+        <div class="item-title">
           ${record.item}
         </div>
 
@@ -353,7 +767,9 @@ const handleDeleteGroup = async (
           </span>
 
           <span class="value">
-            ${Number(record.quantity).toLocaleString()}
+            ${Number(
+              record.quantity
+            ).toLocaleString()}
           </span>
         </div>
 
@@ -363,7 +779,9 @@ const handleDeleteGroup = async (
           </span>
 
           <span class="value">
-            Rs. ${Number(record.price).toLocaleString()}
+            Rs. ${Number(
+              record.price
+            ).toLocaleString()}
           </span>
         </div>
 
@@ -373,7 +791,9 @@ const handleDeleteGroup = async (
           </span>
 
           <span class="value">
-            Rs. ${Number(record.totalPrice).toLocaleString()}
+            Rs. ${Number(
+              record.totalPrice
+            ).toLocaleString()}
           </span>
         </div>
 
@@ -383,7 +803,9 @@ const handleDeleteGroup = async (
           </span>
 
           <span class="value">
-            Rs. ${Number(record.paidPrice).toLocaleString()}
+            Rs. ${Number(
+              record.paidPrice
+            ).toLocaleString()}
           </span>
         </div>
 
@@ -393,18 +815,20 @@ const handleDeleteGroup = async (
           </span>
 
           <span class="value">
-            Rs. ${Number(record.remainingPrice).toLocaleString()}
+            Rs. ${Number(
+              record.remainingPrice
+            ).toLocaleString()}
           </span>
         </div>
 
       </div>
     `
-      )
-      .join("");
+        )
+        .join("");
 
-    // =========================
+    // ==================================================
     // PRINT HTML
-    // =========================
+    // ==================================================
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -609,16 +1033,19 @@ const handleDeleteGroup = async (
           <div class="summary">
 
             <div class="summary-row overall-total">
+
               <span>
-                Over all Total Amount
+                Over All Total Amount
               </span>
 
               <span class="summary-value">
                 Rs. ${overallTotal.toLocaleString()}
               </span>
+
             </div>
 
             <div class="summary-row overall-paid">
+
               <span>
                 OverAll Paid Amount
               </span>
@@ -626,9 +1053,11 @@ const handleDeleteGroup = async (
               <span class="summary-value">
                 Rs. ${overallPaid.toLocaleString()}
               </span>
+
             </div>
 
             <div class="summary-row overall-remaining">
+
               <span>
                 Over All Remaining Amount
               </span>
@@ -636,6 +1065,7 @@ const handleDeleteGroup = async (
               <span class="summary-value">
                 Rs. ${overallRemaining.toLocaleString()}
               </span>
+
             </div>
 
           </div>
@@ -699,37 +1129,40 @@ const handleDeleteGroup = async (
     };
   };
 
-  // =========================
+  // ======================================================
   // OVERALL PAGE TOTALS
-  // =========================
+  // ======================================================
 
   const grandTotal = items.reduce(
-    (sum, item) => sum + Number(item.totalPrice),
+    (sum, item) =>
+      sum + Number(item.totalPrice),
     0
   );
 
   const totalPaid = items.reduce(
-    (sum, item) => sum + Number(item.paidPrice),
+    (sum, item) =>
+      sum + Number(item.paidPrice),
     0
   );
 
   const totalRemaining = items.reduce(
-    (sum, item) => sum + Number(item.remainingPrice),
+    (sum, item) =>
+      sum + Number(item.remainingPrice),
     0
   );
 
-  // =========================
+  // ======================================================
   // RETURN
-  // =========================
+  // ======================================================
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6 md:px-8">
 
       <div className="mx-auto max-w-7xl">
 
-        {/* =========================
+        {/* ==================================================
             HEADER
-        ========================= */}
+        ================================================== */}
 
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
@@ -763,9 +1196,9 @@ const handleDeleteGroup = async (
 
         </div>
 
-        {/* =========================
+        {/* ==================================================
             FORM
-        ========================= */}
+        ================================================== */}
 
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -776,9 +1209,11 @@ const handleDeleteGroup = async (
               <div>
 
                 <h2 className="font-semibold text-slate-900">
+
                   {editingId
                     ? "Update Customer Item"
                     : "Add Customer Item"}
+
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-500">
@@ -788,6 +1223,7 @@ const handleDeleteGroup = async (
               </div>
 
               {editingId && (
+
                 <button
                   type="button"
                   onClick={resetForm}
@@ -795,6 +1231,7 @@ const handleDeleteGroup = async (
                 >
                   Cancel
                 </button>
+
               )}
 
             </div>
@@ -841,13 +1278,15 @@ const handleDeleteGroup = async (
                   onChange={handleChange}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
-<option value="سیمنٹ DG">
+
+                  <option value="سیمنٹ DG">
                     سیمنٹ DG
                   </option>
-                                  
-<option value="سیمنٹ PK">
+
+                  <option value="سیمنٹ PK">
                     سیمنٹ PK
                   </option>
+
                   <option value="سریا moiz">
                     سریا moiz
                   </option>
@@ -952,7 +1391,8 @@ const handleDeleteGroup = async (
                 </p>
 
                 <p className="mt-1 text-lg font-bold text-slate-900">
-                  Rs. {totalPrice.toLocaleString()}
+                  Rs.{" "}
+                  {totalPrice.toLocaleString()}
                 </p>
 
               </div>
@@ -966,7 +1406,8 @@ const handleDeleteGroup = async (
                 </p>
 
                 <p className="mt-1 text-lg font-bold text-orange-700">
-                  Rs. {remainingPrice.toLocaleString()}
+                  Rs.{" "}
+                  {remainingPrice.toLocaleString()}
                 </p>
 
               </div>
@@ -980,11 +1421,13 @@ const handleDeleteGroup = async (
                 disabled={loading}
                 className="h-11 rounded-xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
+
                 {loading
                   ? "Saving..."
                   : editingId
                   ? "Update Item"
                   : "Add Item"}
+
               </button>
 
             </div>
@@ -993,9 +1436,9 @@ const handleDeleteGroup = async (
 
         </div>
 
-        {/* =========================
+        {/* ==================================================
             CUSTOMER TABLE
-        ========================= */}
+        ================================================== */}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -1030,8 +1473,6 @@ const handleDeleteGroup = async (
               <thead className="bg-slate-50">
 
                 <tr>
-
-                  {/* DATE COLUMN ADDED */}
 
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Date
@@ -1111,32 +1552,61 @@ const handleDeleteGroup = async (
 
                 ) : (
 
-                  Object.entries(groupedItems).map(
-                    ([customerName, customerItems]) => {
+                  Object.entries(
+                    groupedItems
+                  ).map(
+                    ([
+                      customerName,
+                      customerItems,
+                    ]) => {
+
+                      // ====================================
+                      // NORMAL ITEM TOTALS
+                      // ====================================
 
                       const customerTotal =
                         customerItems.reduce(
                           (sum, item) =>
-                            sum + Number(item.totalPrice),
+                            sum +
+                            Number(
+                              item.totalPrice
+                            ),
                           0
                         );
 
                       const customerPaid =
                         customerItems.reduce(
                           (sum, item) =>
-                            sum + Number(item.paidPrice),
+                            sum +
+                            Number(
+                              item.paidPrice
+                            ),
                           0
                         );
 
                       const customerRemaining =
                         customerItems.reduce(
                           (sum, item) =>
-                            sum + Number(item.remainingPrice),
+                            sum +
+                            Number(
+                              item.remainingPrice
+                            ),
                           0
                         );
 
+                      // ====================================
+                      // SAVED / UPDATED OVERALL
+                      // ====================================
+
+                      const overall =
+                        getCustomerOverall(
+                          customerItems
+                        );
+
                       return (
-                        <React.Fragment key={customerName}>
+                        <React.Fragment
+                          key={customerName}
+                        >
 
                           {/* CUSTOMER HEADER */}
 
@@ -1166,8 +1636,11 @@ const handleDeleteGroup = async (
                                     </p>
 
                                     <p className="text-xs text-slate-300">
-                                      {customerItems.length}{" "}
-                                      {customerItems.length === 1
+                                      {
+                                        customerItems.length
+                                      }{" "}
+                                      {customerItems.length ===
+                                      1
                                         ? "item"
                                         : "items"}
                                     </p>
@@ -1178,77 +1651,114 @@ const handleDeleteGroup = async (
 
                                 <div className="flex flex-wrap items-center gap-3">
 
+                                  {/* =================================
+                                      OVERALL TOTAL
+                                  ================================= */}
+
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px]  text-white">
+                                    <p className="text-[10px] text-white">
                                       OverAll Total Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-white">
                                       Rs.{" "}
-                                      {customerTotal.toLocaleString()}
+                                      {overall.total.toLocaleString()}
                                     </p>
 
                                   </div>
 
+                                  {/* =================================
+                                      OVERALL PAID
+                                  ================================= */}
+
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px]  text-white">
-                                    OverAll Paid Rs.
+                                    <p className="text-[10px] text-white">
+                                      OverAll Paid Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-gray-100">
                                       Rs.{" "}
-                                      {customerPaid.toLocaleString()}
+                                      {overall.paid.toLocaleString()}
                                     </p>
 
                                   </div>
 
+                                  {/* =================================
+                                      OVERALL REMAINING
+                                  ================================= */}
+
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
-                                    <p className="text-[10px]  text-white">
-                                     OverAll Remaining Rs.
+                                    <p className="text-[10px] text-white">
+                                      OverAll Remaining Rs.
                                     </p>
 
                                     <p className="text-sm font-bold text-orange-400">
                                       Rs.{" "}
-                                      {customerRemaining.toLocaleString()}
+                                      {overall.remaining.toLocaleString()}
                                     </p>
 
                                   </div>
 
-                                  {/* PRINT FULL */}
-{/* PRINT FULL */}
+                                  {/* =================================
+                                      UPDATE OVERALL BUTTON
+                                  ================================= */}
 
-<button
-  type="button"
-  onClick={() =>
-    handlePrintGroup(
-      customerName,
-      customerItems
-    )
-  }
-  className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
->
-  <Printer size={16} />
-  Print Full
-</button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openOverallModal(
+                                        customerName,
+                                        customerItems
+                                      )
+                                    }
+                                    className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-600"
+                                  >
+                                    Update Overall
+                                  </button>
 
-{/* DELETE FULL CUSTOMER GROUP */}
+                                  {/* =================================
+                                      PRINT FULL
+                                  ================================= */}
 
-<button
-  type="button"
-  disabled={loading}
-  onClick={() =>
-    handleDeleteGroup(
-      customerName,
-      customerItems
-    )
-  }
-  className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
->
-  Delete All
-</button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handlePrintGroup(
+                                        customerName,
+                                        customerItems
+                                      )
+                                    }
+                                    className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
+                                  >
+
+                                    <Printer
+                                      size={16}
+                                    />
+
+                                    Print Full
+
+                                  </button>
+
+                                  {/* =================================
+                                      DELETE FULL
+                                  ================================= */}
+
+                                  <button
+                                    type="button"
+                                    disabled={loading}
+                                    onClick={() =>
+                                      handleDeleteGroup(
+                                        customerName,
+                                        customerItems
+                                      )
+                                    }
+                                    className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Delete All
+                                  </button>
 
                                 </div>
 
@@ -1260,106 +1770,143 @@ const handleDeleteGroup = async (
 
                           {/* CUSTOMER ITEMS */}
 
-                          {customerItems.map((record) => (
+                          {customerItems.map(
+                            (record) => (
 
-                            <tr
-                              key={record.id}
-                              className="transition hover:bg-slate-50"
-                            >
+                              <tr
+                                key={record.id}
+                                className="transition hover:bg-slate-50"
+                              >
 
-                              {/* DATE COLUMN ADDED */}
+                                {/* DATE */}
 
-                            <td className="px-5 py-4 text-sm text-slate-700 whitespace-nowrap">
-  {record.createdAt
-    ? new Date(record.createdAt).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
-    : "-"}
-</td>
+                                <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-700">
 
-                              <td className="px-5 py-4">
-
-                                <p className="font-semibold text-slate-900">
-                                  {record.customerName}
-                                </p>
-
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
-                                  {record.item}
-                                </span>
-
-                              </td>
-
-                              <td className="px-5 py-4 text-sm text-slate-700">
-                                {record.quantity}
-                              </td>
-
-                              <td className="px-5 py-4 text-sm text-slate-700">
-                                Rs.{" "}
-                                {Number(
-                                  record.price
-                                ).toLocaleString()}
-                              </td>
-
-                              <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                                Rs.{" "}
-                                {Number(
-                                  record.totalPrice
-                                ).toLocaleString()}
-                              </td>
-
-                              <td className="px-5 py-4 text-sm font-medium text-emerald-600">
-                                Rs.{" "}
-                                {Number(
-                                  record.paidPrice
-                                ).toLocaleString()}
-                              </td>
-
-                              <td className="px-5 py-4 text-sm font-semibold text-orange-600">
-                                Rs.{" "}
-                                {Number(
-                                  record.remainingPrice
-                                ).toLocaleString()}
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <div className="flex justify-end gap-2">
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleEdit(record)
-                                    }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                                  >
-                                    Edit
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDelete(
-                                        record.id
+                                  {record.createdAt
+                                    ? new Date(
+                                        record.createdAt
+                                      ).toLocaleDateString(
+                                        "en-GB",
+                                        {
+                                          day: "2-digit",
+                                          month: "2-digit",
+                                          year: "numeric",
+                                        }
                                       )
+                                    : "-"}
+
+                                </td>
+
+                                {/* CUSTOMER */}
+
+                                <td className="px-5 py-4">
+
+                                  <p className="font-semibold text-slate-900">
+                                    {
+                                      record.customerName
                                     }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                                  >
-                                    Delete
-                                  </button>
+                                  </p>
 
-                                </div>
+                                </td>
 
-                              </td>
+                                {/* ITEM */}
 
-                            </tr>
+                                <td className="px-5 py-4">
 
-                          ))}
+                                  <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
+                                    {record.item}
+                                  </span>
+
+                                </td>
+
+                                {/* QTY */}
+
+                                <td className="px-5 py-4 text-sm text-slate-700">
+                                  {record.quantity}
+                                </td>
+
+                                {/* PRICE */}
+
+                                <td className="px-5 py-4 text-sm text-slate-700">
+
+                                  Rs.{" "}
+                                  {Number(
+                                    record.price
+                                  ).toLocaleString()}
+
+                                </td>
+
+                                {/* TOTAL */}
+
+                                <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+
+                                  Rs.{" "}
+                                  {Number(
+                                    record.totalPrice
+                                  ).toLocaleString()}
+
+                                </td>
+
+                                {/* PAID */}
+
+                                <td className="px-5 py-4 text-sm font-medium text-emerald-600">
+
+                                  Rs.{" "}
+                                  {Number(
+                                    record.paidPrice
+                                  ).toLocaleString()}
+
+                                </td>
+
+                                {/* REMAINING */}
+
+                                <td className="px-5 py-4 text-sm font-semibold text-orange-600">
+
+                                  Rs.{" "}
+                                  {Number(
+                                    record.remainingPrice
+                                  ).toLocaleString()}
+
+                                </td>
+
+                                {/* ACTION */}
+
+                                <td className="px-5 py-4">
+
+                                  <div className="flex justify-end gap-2">
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleEdit(
+                                          record
+                                        )
+                                      }
+                                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                                    >
+                                      Edit
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleDelete(
+                                          record.id
+                                        )
+                                      }
+                                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                    >
+                                      Delete
+                                    </button>
+
+                                  </div>
+
+                                </td>
+
+                              </tr>
+
+                            )
+                          )}
 
                         </React.Fragment>
                       );
@@ -1376,9 +1923,9 @@ const handleDeleteGroup = async (
 
         </div>
 
-        {/* =========================
+        {/* ==================================================
             OVERALL PAGE SUMMARY
-        ========================= */}
+        ================================================== */}
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
 
@@ -1391,7 +1938,8 @@ const handleDeleteGroup = async (
             </p>
 
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              Rs. {grandTotal.toLocaleString()}
+              Rs.{" "}
+              {grandTotal.toLocaleString()}
             </p>
 
           </div>
@@ -1405,7 +1953,8 @@ const handleDeleteGroup = async (
             </p>
 
             <p className="mt-2 text-2xl font-bold text-emerald-700">
-              Rs. {totalPaid.toLocaleString()}
+              Rs.{" "}
+              {totalPaid.toLocaleString()}
             </p>
 
           </div>
@@ -1419,7 +1968,8 @@ const handleDeleteGroup = async (
             </p>
 
             <p className="mt-2 text-2xl font-bold text-orange-700">
-              Rs. {totalRemaining.toLocaleString()}
+              Rs.{" "}
+              {totalRemaining.toLocaleString()}
             </p>
 
           </div>
@@ -1427,6 +1977,163 @@ const handleDeleteGroup = async (
         </div>
 
       </div>
+
+      {/* ====================================================
+          UPDATE OVERALL MODAL
+      ==================================================== */}
+
+      {showOverallModal && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            {/* MODAL HEADER */}
+
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+
+              <div>
+
+                <h2 className="text-lg font-bold text-slate-900">
+                  Update Overall Price
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Customer:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {
+                      overallModal.customerName
+                    }
+                  </span>
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowOverallModal(false)
+                }
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+
+                <X size={20} />
+
+              </button>
+
+            </div>
+
+            {/* MODAL BODY */}
+
+            <div className="space-y-4 p-5">
+
+              {/* TOTAL */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Overall Total Rs.
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="total"
+                  value={
+                    overallModal.total
+                  }
+                  onChange={
+                    handleOverallChange
+                  }
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                  placeholder="159000"
+                />
+
+              </div>
+
+              {/* PAID */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Overall Paid Rs.
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="paid"
+                  value={
+                    overallModal.paid
+                  }
+                  onChange={
+                    handleOverallChange
+                  }
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-bold text-emerald-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                  placeholder="100000"
+                />
+
+              </div>
+
+              {/* REMAINING */}
+
+              <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+
+                <div className="flex items-center justify-between">
+
+                  <span className="text-sm font-semibold text-orange-700">
+                    Overall Remaining Rs.
+                  </span>
+
+                  <span className="text-xl font-bold text-orange-700">
+                    Rs.{" "}
+                    {modalRemaining.toLocaleString()}
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* MODAL FOOTER */}
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowOverallModal(false)
+                }
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={
+                  handleUpdateOverall
+                }
+                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+
+                {loading
+                  ? "Updating..."
+                  : "Update Price"}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
     </div>
   );

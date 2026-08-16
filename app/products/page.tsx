@@ -24,6 +24,9 @@ const products: Product[] = [
   { id: 17, name: "پلاسٹک دروازہ", image: "/door.png" },
   { id: 18, name: "فوم", image: "/foam.png" },
   { id: 19, name: "رینگ", image: "/RING.png" },
+  { id: 20, name: "white cement", image: "/white_cement.jpg" },
+  { id: 21, name: "جالی ریت", image: "/jali.jpg" },
+  { id: 22, name: "بلیڈ", image: "/blades.webp" },
 ];
 
 export default function Products() {

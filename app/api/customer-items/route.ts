@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../lib/prisma";
 import { requireAuth } from "../../lib/authGuard";
 
-// ==========================
+// ======================================================
 // GET ALL CUSTOMER ITEMS
-// ==========================
-export async function GET(request: NextRequest) {
-   const auth = requireAuth(request);
+// ======================================================
 
-  if (auth instanceof NextResponse) {
-    return auth;
-  }
+export async function GET(request: NextRequest) {
   try {
+    const auth = requireAuth(request);
+
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
     const items = await prisma.customerItem.findMany({
       orderBy: {
         createdAt: "desc",
@@ -30,21 +32,25 @@ export async function GET(request: NextRequest) {
         success: false,
         message: "Failed to fetch customer items",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// ==========================
-// POST CUSTOMER ITEM
-// ==========================
-export async function POST(request: NextRequest) {
-   const auth = requireAuth(request);
+// ======================================================
+// POST NEW CUSTOMER ITEM
+// ======================================================
 
-  if (auth instanceof NextResponse) {
-    return auth;
-  }
+export async function POST(request: NextRequest) {
   try {
+    const auth = requireAuth(request);
+
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
     const body = await request.json();
 
     const {
@@ -52,48 +58,108 @@ export async function POST(request: NextRequest) {
       item,
       quantity,
       price,
-      paidPrice = 0,
+      paidPrice,
     } = body;
 
-    if (
-      !customerName ||
-      !item ||
-      quantity === undefined ||
-      price === undefined
-    ) {
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (!customerName?.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message: "customerName, item, quantity and price are required",
+          message: "Customer name is required",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const totalPrice = Number(quantity) * Number(price);
-    const paid = Number(paidPrice);
-    const remainingPrice = totalPrice - paid;
+    if (!item) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Item is required",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-    const newItem = await prisma.customerItem.create({
-      data: {
-        customerName,
-        item,
-        quantity: Number(quantity),
-        price: Number(price),
-        totalPrice,
-        paidPrice: paid,
-        remainingPrice,
-      },
+    const newQuantity = Number(quantity) || 0;
+    const newPrice = Number(price) || 0;
+    const newPaidPrice = Number(paidPrice) || 0;
+
+    if (newQuantity <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quantity must be greater than 0",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPrice <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Price must be greater than 0",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPaidPrice > newQuantity * newPrice) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Paid amount cannot be greater than total price",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // CALCULATIONS
+    // =========================
+
+    const totalPrice = newQuantity * newPrice;
+
+    const remainingPrice =
+      totalPrice - newPaidPrice;
+
+    // =========================
+    // CREATE
+    // =========================
+
+    const createdItem =
+      await prisma.customerItem.create({
+        data: {
+          customerName: customerName.trim(),
+          item,
+          quantity: newQuantity,
+          price: newPrice,
+          totalPrice,
+          paidPrice: newPaidPrice,
+          remainingPrice,
+        },
+      });
+
+    return NextResponse.json({
+      success: true,
+      message: "Customer item added successfully",
+      data: createdItem,
     });
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Customer item created successfully",
-        data: newItem,
-      },
-      { status: 201 }
-    );
   } catch (error) {
     console.error("POST Customer Item Error:", error);
 
@@ -102,21 +168,25 @@ export async function POST(request: NextRequest) {
         success: false,
         message: "Failed to create customer item",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// ==========================
-// UPDATE CUSTOMER ITEM
-// ==========================
+// ======================================================
+// PUT UPDATE CUSTOMER ITEM
+// ======================================================
+
 export async function PUT(request: NextRequest) {
   try {
-     const auth = requireAuth(request);
+    const auth = requireAuth(request);
 
-  if (auth instanceof NextResponse) {
-    return auth;
-  }
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
     const body = await request.json();
 
     const {
@@ -128,21 +198,32 @@ export async function PUT(request: NextRequest) {
       paidPrice,
     } = body;
 
+    // =========================
+    // ID VALIDATION
+    // =========================
+
     if (!id) {
       return NextResponse.json(
         {
           success: false,
           message: "id is required",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const existingItem = await prisma.customerItem.findUnique({
-      where: {
-        id: Number(id),
-      },
-    });
+    // =========================
+    // FIND EXISTING
+    // =========================
+
+    const existingItem =
+      await prisma.customerItem.findUnique({
+        where: {
+          id: Number(id),
+        },
+      });
 
     if (!existingItem) {
       return NextResponse.json(
@@ -150,9 +231,15 @@ export async function PUT(request: NextRequest) {
           success: false,
           message: "Customer item not found",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
+
+    // =========================
+    // NEW VALUES
+    // =========================
 
     const newQuantity =
       quantity !== undefined
@@ -169,61 +256,296 @@ export async function PUT(request: NextRequest) {
         ? Number(paidPrice)
         : existingItem.paidPrice;
 
-    const totalPrice = newQuantity * newPrice;
-    const remainingPrice = totalPrice - newPaidPrice;
+    // =========================
+    // VALIDATION
+    // =========================
 
-    const updatedItem = await prisma.customerItem.update({
-      where: {
-        id: Number(id),
+    if (newQuantity <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quantity must be greater than 0",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPrice <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Price must be greater than 0",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // CALCULATIONS
+    // =========================
+
+    const totalPrice =
+      newQuantity * newPrice;
+
+    const remainingPrice =
+      totalPrice - newPaidPrice;
+
+    if (newPaidPrice > totalPrice) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Paid amount cannot be greater than total price",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // UPDATE
+    // =========================
+
+    const updatedItem =
+      await prisma.customerItem.update({
+        where: {
+          id: Number(id),
+        },
+
+        data: {
+          customerName:
+            customerName !== undefined
+              ? customerName.trim()
+              : existingItem.customerName,
+
+          item:
+            item !== undefined
+              ? item
+              : existingItem.item,
+
+          quantity: newQuantity,
+          price: newPrice,
+          totalPrice,
+          paidPrice: newPaidPrice,
+          remainingPrice,
+        },
+      });
+
+    return NextResponse.json({
+      success: true,
+      message:
+        "Customer item updated successfully",
+      data: updatedItem,
+    });
+  } catch (error) {
+    console.error(
+      "PUT Customer Item Error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Failed to update customer item",
       },
-      data: {
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+// ======================================================
+// UPDATE OVERALL CUSTOMER PRICE
+// ======================================================
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = requireAuth(request);
+
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
+    const body = await request.json();
+
+    const {
+      customerName,
+      overallTotal,
+      overallPaid,
+      overallRemaining,
+    } = body;
+
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (!customerName?.trim()) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Customer name is required",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const total = Number(overallTotal);
+    const paid = Number(overallPaid);
+    const remaining = Number(overallRemaining);
+
+    if (
+      Number.isNaN(total) ||
+      Number.isNaN(paid) ||
+      Number.isNaN(remaining)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid overall values",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (total < 0 || paid < 0 || remaining < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Overall values cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (paid > total) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Overall paid cannot be greater than overall total",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // CALCULATE REMAINING
+    // =========================
+
+    const calculatedRemaining =
+      total - paid;
+
+    // =========================
+    // FIND CUSTOMER RECORDS
+    // =========================
+
+    const customerItems =
+      await prisma.customerItem.findMany({
+        where: {
+          customerName:
+            customerName.trim(),
+        },
+      });
+
+    if (customerItems.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Customer records not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    // =========================
+    // SAVE OVERALL VALUES
+    // ON ALL CUSTOMER RECORDS
+    // =========================
+
+    await prisma.customerItem.updateMany({
+      where: {
         customerName:
-          customerName !== undefined
-            ? customerName
-            : existingItem.customerName,
+          customerName.trim(),
+      },
 
-        item:
-          item !== undefined
-            ? item
-            : existingItem.item,
-
-        quantity: newQuantity,
-        price: newPrice,
-        totalPrice,
-        paidPrice: newPaidPrice,
-        remainingPrice,
+      data: {
+        overallTotal: total,
+        overallPaid: paid,
+        overallRemaining:
+          calculatedRemaining,
       },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Customer item updated successfully",
-      data: updatedItem,
+
+      message:
+        "Overall customer price updated successfully",
+
+      data: {
+        customerName:
+          customerName.trim(),
+
+        overallTotal: total,
+
+        overallPaid: paid,
+
+        overallRemaining:
+          calculatedRemaining,
+      },
     });
   } catch (error) {
-    console.error("PUT Customer Item Error:", error);
+    console.error(
+      "PATCH Overall Customer Price Error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to update customer item",
+        message:
+          "Failed to update overall customer price",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// ==========================
+// ======================================================
 // DELETE CUSTOMER ITEM
-// ==========================
-export async function DELETE(request: NextRequest) {
-   const auth = requireAuth(request);
+// ======================================================
 
-  if (auth instanceof NextResponse) {
-    return auth;
-  }
+export async function DELETE(request: NextRequest) {
   try {
+    const auth = requireAuth(request);
+
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
     const body = await request.json();
+
     const { id } = body;
 
     if (!id) {
@@ -232,23 +554,29 @@ export async function DELETE(request: NextRequest) {
           success: false,
           message: "id is required",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const existingItem = await prisma.customerItem.findUnique({
-      where: {
-        id: Number(id),
-      },
-    });
+    const existingItem =
+      await prisma.customerItem.findUnique({
+        where: {
+          id: Number(id),
+        },
+      });
 
     if (!existingItem) {
       return NextResponse.json(
         {
           success: false,
-          message: "Customer item not found",
+          message:
+            "Customer item not found",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
@@ -260,17 +588,24 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Customer item deleted successfully",
+      message:
+        "Customer item deleted successfully",
     });
   } catch (error) {
-    console.error("DELETE Customer Item Error:", error);
+    console.error(
+      "DELETE Customer Item Error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to delete customer item",
+        message:
+          "Failed to delete customer item",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
