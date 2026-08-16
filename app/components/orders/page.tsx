@@ -1,7 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pencil,
   Trash2,
@@ -11,14 +10,16 @@ import {
   Search,
   Plus,
   Printer,
-} from 'lucide-react';
+  X,
+} from "lucide-react";
 
 interface Item {
+  id?: number;
   name: string;
   price: number;
   quantity: number;
   total?: number;
-  orderDate?: string;
+  createdAt?: string;
 }
 
 interface Order {
@@ -37,114 +38,159 @@ interface GroupedOrder {
   total: number;
   createdAt: string;
   updatedAt?: string;
-  groupKey: string;
+  orderIds: number[];
 }
 
 export default function OrdersPage() {
+  // =========================================================
+  // ORDERS
+  // =========================================================
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [showModal, setShowModal] = useState(false);
+  // =========================================================
+  // SEARCH / DATE
+  // =========================================================
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // =========================================================
+  // EXPAND
+  // =========================================================
+
+  const [expandedOrders, setExpandedOrders] = useState<
+    Record<string, boolean>
+  >({});
+
+  // =========================================================
+  // EDIT
+  // =========================================================
+
+  const [showModal, setShowModal] = useState(false);
   const [editingOrder, setEditingOrder] =
     useState<GroupedOrder | null>(null);
 
-  const [expandedOrders, setExpandedOrders] =
-    useState<Record<string, boolean>>({});
-
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // =========================================================
-  // DATE FILTER
-  // =========================================================
-
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-
-  // =========================================================
-  // EDIT FORM
-  // =========================================================
-
-  const [formData, setFormData] = useState({
-    customerName: '',
-    items: [] as Item[],
+  const [formData, setFormData] = useState<{
+    customerName: string;
+    items: Item[];
+    total: number;
+  }>({
+    customerName: "",
+    items: [],
     total: 0,
   });
+
+  const [saving, setSaving] = useState(false);
 
   // =========================================================
   // OVERALL ITEM COUNTING
   // =========================================================
 
   const [overallSelectedItem, setOverallSelectedItem] =
-    useState('');
+    useState("");
 
   const [overallCountingPeriod, setOverallCountingPeriod] =
-    useState<'day' | 'weekly' | 'monthly'>('day');
+    useState<"day" | "weekly" | "monthly">("day");
 
   const [overallCountingDate, setOverallCountingDate] =
-    useState(
-      new Date().toISOString().split('T')[0]
-    );
+    useState(new Date().toISOString().split("T")[0]);
 
   // =========================================================
   // ITEM TOTAL
   // =========================================================
 
   const calculateItemTotal = (item: Item) => {
-    return (
-      Number(item.price || 0) *
-      Number(item.quantity || 0)
-    );
+    return Number(item.price || 0) * Number(item.quantity || 0);
   };
 
   // =========================================================
-  // ITEMS TOTAL
+  // ITEMS CALCULATED TOTAL
+  //
+  // NOTE:
+  // This is only for display.
+  // It NEVER overwrites order.total.
   // =========================================================
 
   const calculateItemsTotal = (items: Item[]) => {
-    return items.reduce(
-      (sum, item) =>
-        sum + calculateItemTotal(item),
-      0
-    );
+    return items.reduce((sum, item) => {
+      return sum + calculateItemTotal(item);
+    }, 0);
   };
 
   // =========================================================
-  // GROUP KEY
+  // NORMALIZE CUSTOMER NAME
   // =========================================================
 
-  const getGroupKey = (name: string) =>
-    name.toLowerCase().trim();
+  const getGroupKey = (name: string) => {
+    return name.trim().toLowerCase();
+  };
 
   // =========================================================
   // FETCH ORDERS
   // =========================================================
 
   const fetchOrders = async () => {
-    setLoading(true);
-
     try {
-      const res = await fetch(
-        '/api/orders',
-        {
-          cache: 'no-store',
-        }
-      );
+      setLoading(true);
 
-      const data = await res.json();
+      const response = await fetch("/api/orders", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (data.success) {
-        setOrders(data.orders || []);
-      } else {
-        console.error(
-          data.message ||
-            'Failed to fetch orders'
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Failed to fetch orders"
         );
       }
-    } catch (error) {
-      console.error(
-        'Fetch orders error:',
-        error
+
+      const apiOrders: Order[] = (data.orders || []).map(
+        (order: any) => ({
+          ...order,
+
+          id: Number(order.id),
+
+          customerName: order.customerName || "",
+
+          total: Number(order.total || 0),
+
+          items: (order.items || []).map((item: any) => ({
+            ...item,
+
+            id:
+              item.id !== undefined
+                ? Number(item.id)
+                : undefined,
+
+            name: item.name || "",
+
+            price: Number(item.price || 0),
+
+            quantity: Number(item.quantity || 0),
+
+            total:
+              item.total !== undefined
+                ? Number(item.total)
+                : Number(item.price || 0) *
+                  Number(item.quantity || 0),
+
+            createdAt:
+              item.createdAt || order.createdAt,
+          })),
+        })
+      );
+
+      setOrders(apiOrders);
+    } catch (error: any) {
+      console.error("Fetch orders error:", error);
+
+      alert(
+        error?.message || "Failed to load orders"
       );
     } finally {
       setLoading(false);
@@ -159,567 +205,366 @@ export default function OrdersPage() {
   // DATE FILTER
   // =========================================================
 
-  const dateFilteredOrders =
-    useMemo(() => {
-      return orders.filter(
-        (order) => {
-          const orderDate =
-            new Date(
-              order.createdAt
-            );
+  const dateFilteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const orderDate = new Date(order.createdAt);
 
-          if (fromDate) {
-            const from =
-              new Date(
-                `${fromDate}T00:00:00`
-              );
+      if (fromDate) {
+        const start = new Date(`${fromDate}T00:00:00`);
 
-            if (
-              orderDate < from
-            ) {
-              return false;
-            }
-          }
-
-          if (toDate) {
-            const to =
-              new Date(
-                `${toDate}T23:59:59.999`
-              );
-
-            if (
-              orderDate > to
-            ) {
-              return false;
-            }
-          }
-
-          return true;
+        if (orderDate < start) {
+          return false;
         }
-      );
-    }, [
-      orders,
-      fromDate,
-      toDate,
-    ]);
+      }
+
+      if (toDate) {
+        const end = new Date(`${toDate}T23:59:59.999`);
+
+        if (orderDate > end) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, fromDate, toDate]);
 
   // =========================================================
   // SEARCH
   // =========================================================
 
-  const filteredOrders =
-    useMemo(() => {
-      return dateFilteredOrders.filter(
-        (order) =>
-          order.customerName
-            .toLowerCase()
-            .includes(
-              searchTerm.toLowerCase()
-            )
-      );
-    }, [
-      dateFilteredOrders,
-      searchTerm,
-    ]);
+  const filteredOrders = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
 
-  // =========================================================
-  // GROUP FILTERED ORDERS
-  // =========================================================
+    if (!search) {
+      return dateFilteredOrders;
+    }
 
-  const groupedOrders =
-    useMemo<GroupedOrder[]>(() => {
-      const map =
-        new Map<
-          string,
-          GroupedOrder
-        >();
+    return dateFilteredOrders.filter((order) => {
+      const customerMatch = order.customerName
+        .toLowerCase()
+        .includes(search);
 
-      filteredOrders.forEach(
-        (order) => {
-          const key =
-            getGroupKey(
-              order.customerName
-            );
-
-          const orderItems =
-            (
-              order.items || []
-            ).map(
-              (item) => ({
-                ...item,
-                orderDate:
-                  order.createdAt,
-              })
-            );
-
-          if (!map.has(key)) {
-            map.set(key, {
-              id: order.id,
-
-              customerName:
-                order.customerName,
-
-              items: orderItems,
-
-              /*
-               * Use saved total for the group
-               * when the group contains one order.
-               *
-               * This allows manually edited totals
-               * to remain exactly as saved.
-               */
-              total:
-                Number(
-                  order.total || 0
-                ),
-
-              createdAt:
-                order.createdAt,
-
-              updatedAt:
-                order.updatedAt,
-
-              groupKey: key,
-            });
-          } else {
-            const existing =
-              map.get(key)!;
-
-            existing.items = [
-              ...existing.items,
-              ...orderItems,
-            ];
-
-            /*
-             * When multiple orders belong to
-             * the same customer group, each order's
-             * saved total is added once.
-             *
-             * Old totals are never added again.
-             */
-            existing.total +=
-              Number(
-                order.total || 0
-              );
-          }
-        }
+      const itemMatch = order.items.some((item) =>
+        item.name.toLowerCase().includes(search)
       );
 
-      return Array.from(
-        map.values()
-      );
-    }, [
-      filteredOrders,
-    ]);
+      return customerMatch || itemMatch;
+    });
+  }, [dateFilteredOrders, searchTerm]);
 
   // =========================================================
-  // ALL GROUPS
+  // GROUP ORDERS FOR DISPLAY
   //
-  // Used for Overall Total.
+  // IMPORTANT:
+  //
+  // Each saved order.total is added exactly once.
+  //
+  // Example:
+  //
+  // Customer A order = 6000
+  // Customer B order = 4000
+  // New order = 5000
+  //
+  // Overall = 15000
+  //
   // =========================================================
 
-  const allGroupedOrders =
-    useMemo<GroupedOrder[]>(() => {
-      const map =
-        new Map<
-          string,
-          GroupedOrder
-        >();
+  const groupedOrders = useMemo<GroupedOrder[]>(() => {
+    const map = new Map<string, GroupedOrder>();
 
-      orders.forEach(
-        (order) => {
-          const key =
-            getGroupKey(
-              order.customerName
-            );
+    filteredOrders.forEach((order) => {
+      const key = getGroupKey(order.customerName);
 
-          const orderItems =
-            (
-              order.items || []
-            ).map(
-              (item) => ({
-                ...item,
-                orderDate:
-                  order.createdAt,
-              })
-            );
+      const items = (order.items || []).map((item) => ({
+        ...item,
+        createdAt: item.createdAt || order.createdAt,
+      }));
 
-          if (!map.has(key)) {
-            map.set(key, {
-              id: order.id,
+      const existing = map.get(key);
 
-              customerName:
-                order.customerName,
+      if (!existing) {
+        map.set(key, {
+          id: order.id,
+          customerName: order.customerName,
+          items,
+          total: Number(order.total || 0),
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+          orderIds: [order.id],
+        });
+      } else {
+        existing.items = [
+          ...existing.items,
+          ...items,
+        ];
 
-              items: orderItems,
+        existing.total += Number(order.total || 0);
 
-              total:
-                Number(
-                  order.total || 0
-                ),
+        existing.orderIds.push(order.id);
 
-              createdAt:
-                order.createdAt,
-
-              updatedAt:
-                order.updatedAt,
-
-              groupKey: key,
-            });
-          } else {
-            const existing =
-              map.get(key)!;
-
-            existing.items = [
-              ...existing.items,
-              ...orderItems,
-            ];
-
-            existing.total +=
-              Number(
-                order.total || 0
-              );
-          }
+        if (
+          new Date(order.createdAt) <
+          new Date(existing.createdAt)
+        ) {
+          existing.createdAt = order.createdAt;
         }
-      );
+      }
+    });
 
-      return Array.from(
-        map.values()
-      );
-    }, [orders]);
+    return Array.from(map.values());
+  }, [filteredOrders]);
 
   // =========================================================
   // OVERALL TOTAL
   //
-  // Example:
+  // Uses SAVED order totals.
   //
-  // A = 6000
-  // B = 4000
-  // New = 5000
-  //
-  // Overall = 15000
   // =========================================================
 
-  const overallTotal =
-    allGroupedOrders.reduce(
-      (sum, group) =>
-        sum +
-        Number(
-          group.total || 0
-        ),
-      0
-    );
+  const overallTotal = useMemo(() => {
+    return orders.reduce((sum, order) => {
+      return sum + Number(order.total || 0);
+    }, 0);
+  }, [orders]);
+
+  // =========================================================
+  // CUSTOMER GROUP COUNT
+  // =========================================================
+
+  const customerGroupCount = useMemo(() => {
+    const unique = new Set<string>();
+
+    orders.forEach((order) => {
+      unique.add(getGroupKey(order.customerName));
+    });
+
+    return unique.size;
+  }, [orders]);
+
+  // =========================================================
+  // TOGGLE GROUP
+  // =========================================================
+
+  const toggleExpand = (key: string) => {
+    setExpandedOrders((previous) => ({
+      ...previous,
+      [key]: !previous[key],
+    }));
+  };
 
   // =========================================================
   // ITEM COUNTING
   // =========================================================
 
-  const getItemCounting = (
-    items: Item[]
-  ) => {
-    return items.reduce(
-      (
-        result: Record<
-          string,
-          number
-        >,
-        item
-      ) => {
-        const name =
-          item.name.trim();
+  const getItemCounting = (items: Item[]) => {
+    const result: Record<string, number> = {};
 
-        if (!name) {
-          return result;
-        }
+    items.forEach((item) => {
+      const name = item.name.trim();
 
-        result[name] =
-          (result[name] || 0) +
-          Number(
-            item.quantity || 0
-          );
+      if (!name) return;
 
-        return result;
-      },
-      {}
-    );
+      result[name] =
+        (result[name] || 0) +
+        Number(item.quantity || 0);
+    });
+
+    return result;
   };
 
   // =========================================================
   // AVAILABLE ITEMS
   // =========================================================
 
-  const overallAvailableItems =
-    useMemo(() => {
-      return Array.from(
-        new Set(
-          orders.flatMap(
-            (order) =>
-              (
-                order.items ||
-                []
-              )
-                .map(
-                  (item) =>
-                    item.name.trim()
-                )
-                .filter(Boolean)
-          )
-        )
-      ).sort();
-    }, [orders]);
+  const availableItems = useMemo(() => {
+    const items = new Set<string>();
+
+    orders.forEach((order) => {
+      order.items.forEach((item) => {
+        if (item.name.trim()) {
+          items.add(item.name.trim());
+        }
+      });
+    });
+
+    return Array.from(items).sort();
+  }, [orders]);
 
   useEffect(() => {
     if (
-      overallAvailableItems.length >
-        0 &&
+      availableItems.length > 0 &&
       !overallSelectedItem
     ) {
-      setOverallSelectedItem(
-        overallAvailableItems[0]
-      );
+      setOverallSelectedItem(availableItems[0]);
     }
-  }, [
-    overallAvailableItems,
-    overallSelectedItem,
-  ]);
+  }, [availableItems, overallSelectedItem]);
 
   // =========================================================
-  // OVERALL COUNTING DATE FILTER
+  // COUNTING PERIOD FILTER
   // =========================================================
 
-  const overallCountingFilteredOrders =
-    useMemo(() => {
-      return orders.filter(
-        (order) => {
-          const orderDate =
-            new Date(
-              order.createdAt
-            );
+  const countingFilteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const orderDate = new Date(order.createdAt);
 
-          const selectedDate =
-            new Date(
-              `${overallCountingDate}T00:00:00`
-            );
-
-          if (
-            overallCountingPeriod ===
-            'day'
-          ) {
-            return (
-              orderDate.getFullYear() ===
-                selectedDate.getFullYear() &&
-              orderDate.getMonth() ===
-                selectedDate.getMonth() &&
-              orderDate.getDate() ===
-                selectedDate.getDate()
-            );
-          }
-
-          if (
-            overallCountingPeriod ===
-            'weekly'
-          ) {
-            const startOfWeek =
-              new Date(
-                selectedDate
-              );
-
-            const day =
-              startOfWeek.getDay();
-
-            const diff =
-              day === 0
-                ? -6
-                : 1 - day;
-
-            startOfWeek.setDate(
-              startOfWeek.getDate() +
-                diff
-            );
-
-            startOfWeek.setHours(
-              0,
-              0,
-              0,
-              0
-            );
-
-            const endOfWeek =
-              new Date(
-                startOfWeek
-              );
-
-            endOfWeek.setDate(
-              endOfWeek.getDate() +
-                6
-            );
-
-            endOfWeek.setHours(
-              23,
-              59,
-              59,
-              999
-            );
-
-            return (
-              orderDate >=
-                startOfWeek &&
-              orderDate <=
-                endOfWeek
-            );
-          }
-
-          if (
-            overallCountingPeriod ===
-            'monthly'
-          ) {
-            return (
-              orderDate.getFullYear() ===
-                selectedDate.getFullYear() &&
-              orderDate.getMonth() ===
-                selectedDate.getMonth()
-            );
-          }
-
-          return false;
-        }
+      const selectedDate = new Date(
+        `${overallCountingDate}T00:00:00`
       );
-    }, [
-      orders,
-      overallCountingDate,
-      overallCountingPeriod,
-    ]);
+
+      if (overallCountingPeriod === "day") {
+        return (
+          orderDate.getFullYear() ===
+            selectedDate.getFullYear() &&
+          orderDate.getMonth() ===
+            selectedDate.getMonth() &&
+          orderDate.getDate() ===
+            selectedDate.getDate()
+        );
+      }
+
+      if (overallCountingPeriod === "monthly") {
+        return (
+          orderDate.getFullYear() ===
+            selectedDate.getFullYear() &&
+          orderDate.getMonth() ===
+            selectedDate.getMonth()
+        );
+      }
+
+      if (overallCountingPeriod === "weekly") {
+        const startOfWeek = new Date(selectedDate);
+
+        const day = startOfWeek.getDay();
+
+        const difference =
+          day === 0 ? -6 : 1 - day;
+
+        startOfWeek.setDate(
+          startOfWeek.getDate() + difference
+        );
+
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const endOfWeek = new Date(startOfWeek);
+
+        endOfWeek.setDate(
+          endOfWeek.getDate() + 6
+        );
+
+        endOfWeek.setHours(
+          23,
+          59,
+          59,
+          999
+        );
+
+        return (
+          orderDate >= startOfWeek &&
+          orderDate <= endOfWeek
+        );
+      }
+
+      return false;
+    });
+  }, [
+    orders,
+    overallCountingDate,
+    overallCountingPeriod,
+  ]);
 
   // =========================================================
   // SELECTED ITEM COUNT
   // =========================================================
 
-  const overallSelectedItemCount =
-    overallCountingFilteredOrders.reduce(
+  const selectedItemCount = useMemo(() => {
+    if (!overallSelectedItem) return 0;
+
+    return countingFilteredOrders.reduce(
       (sum, order) => {
-        const items =
-          (
-            order.items ||
-            []
-          ).filter(
+        const count = order.items
+          .filter(
             (item) =>
               item.name.trim() ===
               overallSelectedItem
+          )
+          .reduce(
+            (itemSum, item) =>
+              itemSum +
+              Number(item.quantity || 0),
+            0
           );
 
-        return (
-          sum +
-          items.reduce(
-            (
-              itemSum,
-              item
-            ) =>
-              itemSum +
-              Number(
-                item.quantity || 0
-              ),
-            0
-          )
-        );
+        return sum + count;
       },
       0
     );
+  }, [
+    countingFilteredOrders,
+    overallSelectedItem,
+  ]);
 
   // =========================================================
   // SELECTED ITEM AMOUNT
   // =========================================================
 
-  const overallSelectedItemAmount =
-    overallCountingFilteredOrders.reduce(
+  const selectedItemAmount = useMemo(() => {
+    if (!overallSelectedItem) return 0;
+
+    return countingFilteredOrders.reduce(
       (sum, order) => {
-        const items =
-          (
-            order.items ||
-            []
-          ).filter(
+        const amount = order.items
+          .filter(
             (item) =>
               item.name.trim() ===
               overallSelectedItem
+          )
+          .reduce(
+            (itemSum, item) =>
+              itemSum +
+              calculateItemTotal(item),
+            0
           );
 
-        return (
-          sum +
-          items.reduce(
-            (
-              itemSum,
-              item
-            ) =>
-              itemSum +
-              calculateItemTotal(
-                item
-              ),
-            0
-          )
-        );
+        return sum + amount;
       },
       0
     );
-
-  // =========================================================
-  // CLEAR DATE
-  // =========================================================
-
-  const clearDateFilter =
-    () => {
-      setFromDate('');
-      setToDate('');
-    };
-
-  // =========================================================
-  // TOGGLE GROUP
-  // =========================================================
-
-  const toggleExpand = (
-    key: string
-  ) => {
-    setExpandedOrders(
-      (previous) => ({
-        ...previous,
-        [key]:
-          !previous[key],
-      })
-    );
-  };
+  }, [
+    countingFilteredOrders,
+    overallSelectedItem,
+  ]);
 
   // =========================================================
   // EDIT GROUP
+  //
+  // For a customer group, the frontend currently edits
+  // the first/selected order ID.
+  //
+  // If group contains only one order:
+  // perfect.
+  //
   // =========================================================
 
-  const handleEdit = (
-    group: GroupedOrder
-  ) => {
-    const editItems =
-      group.items.map(
-        (item) => ({
-          ...item,
-        })
-      );
+  const handleEdit = (group: GroupedOrder) => {
+    /*
+     * Important:
+     *
+     * group.total is the SAVED total.
+     *
+     * Do NOT use calculateItemsTotal(group.items).
+     */
 
-    setEditingOrder(
-      group
-    );
+    setEditingOrder(group);
 
     setFormData({
-      customerName:
-        group.customerName,
+      customerName: group.customerName,
 
-      items: editItems,
+      items: group.items.map((item) => ({
+        ...item,
+      })),
 
-      /*
-       * IMPORTANT:
-       *
-       * Use saved group total.
-       * This is the value user can manually edit.
-       */
-      total:
-        Number(
-          group.total || 0
-        ),
+      total: Number(group.total || 0),
     });
 
     setShowModal(true);
@@ -730,270 +575,304 @@ export default function OrdersPage() {
   // =========================================================
 
   const addItem = () => {
-    setFormData(
-      (previous) => ({
-        ...previous,
+    setFormData((previous) => ({
+      ...previous,
 
-        items: [
-          ...previous.items,
-          {
-            name: '',
-            price: 0,
-            quantity: 1,
-          },
-        ],
-      })
-    );
-  };
+      items: [
+        ...previous.items,
 
-  // =========================================================
-  // REMOVE ITEM
-  // =========================================================
+        {
+          name: "",
+          price: 0,
+          quantity: 1,
+          total: 0,
+        },
+      ],
 
-  const removeItem = (
-    index: number
-  ) => {
-    setFormData(
-      (previous) => ({
-        ...previous,
-
-        items:
-          previous.items.filter(
-            (_, itemIndex) =>
-              itemIndex !==
-              index
-          ),
-      })
-    );
+      /*
+       * TOTAL IS NOT CHANGED
+       */
+      total: previous.total,
+    }));
   };
 
   // =========================================================
   // UPDATE ITEM
   //
-  // Item changes DO NOT overwrite manually
-  // editable total.
+  // IMPORTANT:
+  //
+  // Item update does NOT change total.
+  //
   // =========================================================
 
   const updateItem = (
     index: number,
     field: keyof Item,
-    value:
-      | string
-      | number
+    value: string | number
   ) => {
-    setFormData(
-      (previous) => {
-        const updatedItems =
-          [
-            ...previous.items,
-          ];
+    setFormData((previous) => {
+      const updatedItems = [
+        ...previous.items,
+      ];
 
-        updatedItems[index] = {
-          ...updatedItems[index],
-          [field]: value,
-        };
+      updatedItems[index] = {
+        ...updatedItems[index],
+        [field]: value,
+      };
 
-        return {
-          ...previous,
-          items:
-            updatedItems,
-        };
-      }
-    );
-  };
-
-  // =========================================================
-  // UPDATE TOTAL MANUALLY
-  // =========================================================
-
-  const updateFormTotal = (
-    value: string
-  ) => {
-    const numberValue =
-      value === ''
-        ? 0
-        : Number(value);
-
-    setFormData(
-      (previous) => ({
+      return {
         ...previous,
-        total:
-          Number.isFinite(
-            numberValue
-          )
-            ? numberValue
-            : 0,
-      })
-    );
+
+        items: updatedItems,
+
+        /*
+         * VERY IMPORTANT
+         *
+         * Keep manually edited total.
+         */
+        total: previous.total,
+      };
+    });
   };
 
   // =========================================================
-  // UPDATE ORDER
+  // DELETE ITEM
   //
   // IMPORTANT:
   //
-  // We send formData.total directly.
+  // Item delete does NOT change total.
   //
-  // We DO NOT replace it with
-  // calculateItemsTotal(formData.items).
-  //
-  // Therefore user can edit:
-  //
-  // 11,400 -> 13,000
-  //
-  // and 13,000 is saved.
   // =========================================================
 
-  const handleUpdateOrder =
-    async () => {
-      if (!editingOrder) {
-        return;
-      }
+  const removeItem = (index: number) => {
+    setFormData((previous) => ({
+      ...previous,
 
-      const finalTotal =
-        Number(
-          formData.total
-        );
+      items: previous.items.filter(
+        (_, itemIndex) =>
+          itemIndex !== index
+      ),
 
-      if (
-        !Number.isFinite(
-          finalTotal
-        )
-      ) {
-        alert(
-          'Please enter a valid total.'
-        );
-
-        return;
-      }
-
-      try {
-        const res =
-          await fetch(
-            '/api/orders',
-            {
-              method: 'PUT',
-
-              headers: {
-                'Content-Type':
-                  'application/json',
-              },
-
-              body: JSON.stringify({
-                id: editingOrder.id,
-
-                customerName:
-                  formData.customerName,
-
-                items:
-                  formData.items,
-
-                /*
-                 * VERY IMPORTANT:
-                 *
-                 * Send manually edited total.
-                 */
-                total:
-                  finalTotal,
-              }),
-            }
-          );
-
-        const data =
-          await res.json();
-
-        if (data.success) {
-          setShowModal(false);
-
-          setEditingOrder(
-            null
-          );
-
-          /*
-           * Fetch from API again.
-           *
-           * Since total was saved to database,
-           * refresh will show the same value.
-           */
-          await fetchOrders();
-
-          alert(
-            'Updated Successfully'
-          );
-        } else {
-          alert(
-            data.message ||
-              'Update failed'
-          );
-        }
-      } catch (error) {
-        console.error(
-          'Update error:',
-          error
-        );
-
-        alert(
-          'Something went wrong while updating order.'
-        );
-      }
-    };
+      /*
+       * Keep total exactly same.
+       */
+      total: previous.total,
+    }));
+  };
 
   // =========================================================
-  // DELETE
+  // UPDATE CUSTOMER NAME
+  // =========================================================
+
+  const updateCustomerName = (
+    value: string
+  ) => {
+    setFormData((previous) => ({
+      ...previous,
+
+      customerName: value,
+
+      /*
+       * Total remains unchanged.
+       */
+      total: previous.total,
+    }));
+  };
+
+  // =========================================================
+  // UPDATE MANUAL TOTAL
+  //
+  // This is the ONLY place where formData.total changes
+  // intentionally.
+  // =========================================================
+
+  const updateManualTotal = (
+    value: string
+  ) => {
+    const numericValue =
+      value === ""
+        ? 0
+        : Number(value);
+
+    setFormData((previous) => ({
+      ...previous,
+
+      total: Number.isFinite(numericValue)
+        ? numericValue
+        : 0,
+    }));
+  };
+
+  // =========================================================
+  // SAVE / UPDATE ORDER
+  // =========================================================
+
+const handleUpdateOrder = async () => {
+  if (!editingOrder) return;
+
+  const finalTotal = Number(
+    formData.total
+  );
+
+  if (!formData.customerName.trim()) {
+    alert("Customer name is required");
+    return;
+  }
+
+  if (!Number.isFinite(finalTotal)) {
+    alert("Please enter a valid total");
+    return;
+  }
+
+  // ========================================================
+  // VERY IMPORTANT
+  //
+  // Send ALL orders belonging to this customer group.
+  //
+  // Example:
+  //
+  // Customer A:
+  // orderIds = [10, 15]
+  //
+  // API will merge them into ONE order.
+  // ========================================================
+
+  const orderIds =
+    editingOrder.orderIds &&
+    editingOrder.orderIds.length > 0
+      ? editingOrder.orderIds
+      : [editingOrder.id];
+
+  try {
+    setSaving(true);
+
+    const response = await fetch(
+      "/api/orders",
+      {
+        method: "PUT",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          // ⭐ ALL GROUP ORDER IDS
+          orderIds,
+
+          customerName:
+            formData.customerName.trim(),
+
+          // ⭐ CURRENT ITEMS ONLY
+          items: formData.items.map(
+            (item) => ({
+              name:
+                item.name.trim(),
+
+              price:
+                Number(item.price) || 0,
+
+              quantity:
+                Number(item.quantity) || 0,
+            })
+          ),
+
+          // ⭐ SAVED CUSTOMER TOTAL
+          //
+          // This is independent from item total.
+          total: finalTotal,
+        }),
+      }
+    );
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.message ||
+          "Failed to update order"
+      );
+    }
+
+    setShowModal(false);
+    setEditingOrder(null);
+
+    // Fresh DB data
+    await fetchOrders();
+
+    alert(
+      "Customer order updated successfully"
+    );
+  } catch (error: any) {
+    console.error(
+      "Update order error:",
+      error
+    );
+
+    alert(
+      error?.message ||
+        "Failed to update order"
+    );
+  } finally {
+    setSaving(false);
+  }
+};
+
+  // =========================================================
+  // DELETE CUSTOMER
   // =========================================================
 
   const handleDelete = async (
     customerName: string
   ) => {
-    if (
-      !confirm(
-        `Delete all orders of ${customerName}?`
-      )
-    ) {
-      return;
-    }
+    const confirmed = window.confirm(
+      `Delete all orders of ${customerName}?`
+    );
+
+    if (!confirmed) return;
 
     try {
-      const res =
-        await fetch(
-          '/api/orders',
-          {
-            method: 'DELETE',
+      const response = await fetch(
+        "/api/orders",
+        {
+          method: "DELETE",
 
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-            body: JSON.stringify({
-              customerName,
-            }),
-          }
-        );
+          body: JSON.stringify({
+            customerName,
+          }),
+        }
+      );
 
       const data =
-        await res.json();
+        await response.json();
 
-      if (data.success) {
-        await fetchOrders();
-
-        alert(
-          'Orders deleted successfully'
-        );
-      } else {
-        alert(
+      if (!response.ok || !data.success) {
+        throw new Error(
           data.message ||
-            'Delete failed'
+            "Failed to delete orders"
         );
       }
-    } catch (error) {
+
+      await fetchOrders();
+
+      alert(
+        "Customer orders deleted successfully"
+      );
+    } catch (error: any) {
       console.error(
-        'Delete error:',
+        "Delete error:",
         error
       );
 
       alert(
-        'Something went wrong while deleting.'
+        error?.message ||
+          "Failed to delete orders"
       );
     }
   };
@@ -1007,69 +886,69 @@ export default function OrdersPage() {
   ) => {
     const printWindow =
       window.open(
-        '',
-        '_blank',
-        'width=400,height=600'
+        "",
+        "_blank",
+        "width=450,height=700"
       );
 
     if (!printWindow) {
       alert(
-        'Please allow popups for printing.'
+        "Please allow popups for printing."
       );
-
       return;
     }
 
     /*
-     * Print the SAME saved group total
-     * that is displayed on screen.
+     * VERY IMPORTANT:
+     *
+     * Print saved group total.
+     * NOT calculated item total.
      */
     const printTotal =
-      Number(
-        group.total || 0
-      );
+      Number(group.total || 0);
 
-    const formattedDate =
-      new Date().toLocaleDateString(
-        'en-GB',
+    const dateText =
+      new Date(
+        group.createdAt
+      ).toLocaleDateString(
+        "en-GB",
         {
-          weekday: 'long',
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
         }
       );
 
-    const itemsHTML =
+    const itemsHtml =
       group.items
         .map(
           (item) => `
-            <div class="bill-row">
+            <tr>
+              <td>
+                ${escapeHtml(item.name)}
+              </td>
 
-              <span class="item-name">
-                ${item.name}
-              </span>
-
-              <span class="price">
+              <td class="right">
                 ${Number(
                   item.price || 0
                 ).toLocaleString()}
-              </span>
+              </td>
 
-              <span class="qty">
-                ${item.quantity}
-              </span>
+              <td class="right">
+                ${Number(
+                  item.quantity || 0
+                )}
+              </td>
 
-              <span class="total">
+              <td class="right">
                 ${calculateItemTotal(
                   item
                 ).toLocaleString()}
-              </span>
-
-            </div>
+              </td>
+            </tr>
           `
         )
-        .join('');
+        .join("");
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -1079,7 +958,9 @@ export default function OrdersPage() {
       <head>
 
         <title>
-          ${group.customerName}
+          ${escapeHtml(
+            group.customerName
+          )}
         </title>
 
         <style>
@@ -1093,14 +974,9 @@ export default function OrdersPage() {
             box-sizing: border-box;
           }
 
-          html,
           body {
             width: 80mm;
             margin: 0;
-            padding: 0;
-          }
-
-          body {
             padding: 4mm;
             font-family: Arial, sans-serif;
             font-size: 12px;
@@ -1111,84 +987,55 @@ export default function OrdersPage() {
             text-align: center;
             font-size: 18px;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
           }
 
-          .info {
+          .line {
+            border-top: 1px dashed #000;
+            margin: 7px 0;
+          }
+
+          .customer {
+            margin-bottom: 5px;
             line-height: 1.6;
-            margin-bottom: 10px;
           }
 
-          .table-header,
-          .bill-row {
-            display: flex;
+          table {
             width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
           }
 
-          .table-header {
-            font-weight: bold;
+          th,
+          td {
+            padding: 4px 2px;
+            border-bottom: 1px dashed #888;
+          }
+
+          th {
             border-top: 1px solid #000;
             border-bottom: 1px solid #000;
-            padding: 5px 0;
           }
 
-          .bill-row {
-            border-bottom: 1px solid #999;
-            padding: 5px 0;
-          }
-
-          .item-name {
-            width: 30%;
-            word-break: break-word;
-          }
-
-          .price {
-            width: 23%;
-            text-align: right;
-          }
-
-          .qty {
-            width: 18%;
-            text-align: right;
-          }
-
-          .total {
-            width: 29%;
+          .right {
             text-align: right;
           }
 
           .grand-total {
             display: flex;
             justify-content: space-between;
-            border-top: 1px solid #000;
-            margin-top: 8px;
-            padding-top: 8px;
             font-size: 16px;
             font-weight: bold;
+            border-top: 1px solid #000;
+            padding-top: 8px;
+            margin-top: 8px;
           }
 
           .footer {
-            border-top: 1px solid #000;
-            margin-top: 15px;
-            padding-top: 8px;
-          }
-
-          .shop-sign {
-            display: flex;
-            justify-content: space-between;
-          }
-
-          .shop-number,
-          .sign {
-            font-weight: bold;
-          }
-
-          .address {
             text-align: center;
-            font-size: 13px;
-            font-weight: bold;
-            margin-top: 12px;
+            margin-top: 15px;
             line-height: 1.5;
+            font-weight: bold;
           }
 
         </style>
@@ -1201,46 +1048,60 @@ export default function OrdersPage() {
           بسم اللہ آئرن سٹور
         </div>
 
-        <div class="info">
+        <div class="line"></div>
+
+        <div class="customer">
 
           <div>
-            <strong>Name:</strong>
-            ${group.customerName}
+            <strong>Customer:</strong>
+            ${escapeHtml(
+              group.customerName
+            )}
           </div>
 
           <div>
             <strong>Date:</strong>
-            ${formattedDate}
+            ${dateText}
           </div>
 
         </div>
 
-        <div class="table-header">
+        <table>
 
-          <span class="item-name">
-            Item
-          </span>
+          <thead>
 
-          <span class="price">
-            Price
-          </span>
+            <tr>
 
-          <span class="qty">
-            Qty/KG
-          </span>
+              <th>Item</th>
 
-          <span class="total">
-            Total
-          </span>
+              <th class="right">
+                Price
+              </th>
 
-        </div>
+              <th class="right">
+                Qty
+              </th>
 
-        ${itemsHTML}
+              <th class="right">
+                Total
+              </th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            ${itemsHtml}
+
+          </tbody>
+
+        </table>
 
         <div class="grand-total">
 
           <span>
-            Grand Total
+            Total
           </span>
 
           <span>
@@ -1251,37 +1112,25 @@ export default function OrdersPage() {
 
         <div class="footer">
 
-          <div class="shop-sign">
-
-            <div class="shop-number">
-
-              <div>
-                Shop Number
-              </div>
-
-              <div>
-                0307-1038571
-              </div>
-
-            </div>
-
-            <div class="sign">
-
-              <div>
-                Sign
-              </div>
-
-              <div>
-                ___________
-              </div>
-
-            </div>
-
+          <div>
+            Shop Number
           </div>
 
-          <div class="address">
+          <div>
+            0307-1038571
+          </div>
+
+          <br />
+
+          <div>
             بسم اللہ آئرن سٹور
+          </div>
+
+          <div>
             جمالپور نزد ماہر والا
+          </div>
+
+          <div>
             پٹرول پمپ قائم پور روڈ
           </div>
 
@@ -1294,15 +1143,20 @@ export default function OrdersPage() {
 
     printWindow.document.close();
 
-    printWindow.onload =
-      () => {
-        printWindow.focus();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
 
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 300);
-      };
+  // =========================================================
+  // RESET DATE
+  // =========================================================
+
+  const clearDates = () => {
+    setFromDate("");
+    setToDate("");
   };
 
   // =========================================================
@@ -1310,7 +1164,7 @@ export default function OrdersPage() {
   // =========================================================
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-4 md:p-6">
 
       <div className="max-w-7xl mx-auto">
 
@@ -1320,26 +1174,37 @@ export default function OrdersPage() {
 
         <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
 
-          <h1 className="text-3xl font-bold">
-            All Orders
-          </h1>
+          <div>
+
+            <h1 className="text-3xl font-bold text-gray-800">
+              Orders
+            </h1>
+
+            <p className="text-gray-500 mt-1">
+              Customer orders and totals
+            </p>
+
+          </div>
+
+          {/* SEARCH */}
 
           <div className="relative w-full md:w-80">
 
             <Search
-              className="absolute left-3 top-3 text-gray-400"
               size={20}
+              className="absolute left-3 top-3 text-gray-400"
             />
 
             <input
-              className="w-full pl-10 py-2 border rounded-xl"
-              placeholder="Search customer..."
+              type="text"
+              placeholder="Search customer or item..."
               value={searchTerm}
               onChange={(e) =>
                 setSearchTerm(
                   e.target.value
                 )
               }
+              className="w-full bg-white border rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
 
           </div>
@@ -1352,11 +1217,11 @@ export default function OrdersPage() {
 
         <div className="bg-white rounded-2xl shadow p-5 mb-6">
 
-          <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
 
-            <div className="flex-1 w-full">
+            <div>
 
-              <label className="block font-semibold mb-2">
+              <label className="block font-semibold text-sm mb-2">
                 From Date
               </label>
 
@@ -1368,14 +1233,14 @@ export default function OrdersPage() {
                     e.target.value
                   )
                 }
-                className="w-full border p-3 rounded-xl"
+                className="w-full border rounded-xl p-3"
               />
 
             </div>
 
-            <div className="flex-1 w-full">
+            <div>
 
-              <label className="block font-semibold mb-2">
+              <label className="block font-semibold text-sm mb-2">
                 To Date
               </label>
 
@@ -1387,18 +1252,16 @@ export default function OrdersPage() {
                     e.target.value
                   )
                 }
-                className="w-full border p-3 rounded-xl"
+                className="w-full border rounded-xl p-3"
               />
 
             </div>
 
             <button
-              onClick={
-                clearDateFilter
-              }
-              className="px-5 py-3 bg-gray-200 rounded-xl hover:bg-gray-300"
+              onClick={clearDates}
+              className="bg-gray-200 hover:bg-gray-300 rounded-xl py-3 px-5 font-semibold"
             >
-              Clear Date
+              Clear Dates
             </button>
 
           </div>
@@ -1406,71 +1269,53 @@ export default function OrdersPage() {
         </div>
 
         {/* =====================================================
-            OVERALL SUMMARY
+            OVERALL TOTAL CARDS
         ===================================================== */}
 
-        <div className="bg-white rounded-2xl shadow p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* OVERALL TOTAL */}
 
-            <div className="border rounded-2xl p-5 bg-indigo-50">
+          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-indigo-600">
 
-              <div className="text-sm text-gray-500 mb-1">
-                Overall Total
-              </div>
+            <div className="text-gray-500 text-sm font-semibold">
+              Overall Total
+            </div>
 
-              <div className="text-3xl font-bold text-indigo-600">
+            <div className="text-3xl font-bold text-indigo-600 mt-2">
 
-                Rs{' '}
+              Rs{" "}
 
-                {overallTotal.toLocaleString()}
-
-              </div>
-
-              <div className="text-sm text-gray-500 mt-2">
-                All current customer groups combined
-              </div>
+              {overallTotal.toLocaleString()}
 
             </div>
 
-            <div className="border rounded-2xl p-5 bg-green-50">
+          </div>
 
-              <div className="text-sm text-gray-500 mb-1">
-                Customer Groups
-              </div>
+          {/* CUSTOMER GROUPS */}
 
-              <div className="text-3xl font-bold text-green-600">
+          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-green-600">
 
-                {
-                  allGroupedOrders.length
-                }
-
-              </div>
-
-              <div className="text-sm text-gray-500 mt-2">
-                Current groups
-              </div>
-
+            <div className="text-gray-500 text-sm font-semibold">
+              Customer Groups
             </div>
 
-            <div className="border rounded-2xl p-5 bg-gray-50">
+            <div className="text-3xl font-bold text-green-600 mt-2">
+              {customerGroupCount}
+            </div>
 
-              <div className="text-sm text-gray-500 mb-1">
-                Total Orders
-              </div>
+          </div>
 
-              <div className="text-3xl font-bold text-gray-700">
+          {/* ORDERS */}
 
-                {
-                  orders.length
-                }
+          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-orange-500">
 
-              </div>
+            <div className="text-gray-500 text-sm font-semibold">
+              Total Orders
+            </div>
 
-              <div className="text-sm text-gray-500 mt-2">
-                All saved orders
-              </div>
-
+            <div className="text-3xl font-bold text-orange-500 mt-2">
+              {orders.length}
             </div>
 
           </div>
@@ -1483,27 +1328,13 @@ export default function OrdersPage() {
 
         <div className="bg-white rounded-2xl shadow p-6 mb-6">
 
-          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-5">
-
-            <h2 className="text-2xl font-bold">
-              Overall Item Counting
-            </h2>
-
-            <div className="font-semibold">
-
-              Total Orders:
-
-              <span className="text-indigo-600 ml-2">
-                {
-                  overallCountingFilteredOrders.length
-                }
-              </span>
-
-            </div>
-
-          </div>
+          <h2 className="text-2xl font-bold mb-5">
+            Overall Item Counting
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            {/* ITEM */}
 
             <div>
 
@@ -1520,14 +1351,14 @@ export default function OrdersPage() {
                     e.target.value
                   )
                 }
-                className="border p-3 w-full rounded-xl bg-white"
+                className="w-full border rounded-xl p-3 bg-white"
               >
 
                 <option value="">
                   Select Item
                 </option>
 
-                {overallAvailableItems.map(
+                {availableItems.map(
                   (item) => (
                     <option
                       key={item}
@@ -1542,10 +1373,12 @@ export default function OrdersPage() {
 
             </div>
 
+            {/* PERIOD */}
+
             <div>
 
               <label className="block text-sm font-semibold mb-2">
-                Counting Period
+                Period
               </label>
 
               <select
@@ -1555,12 +1388,12 @@ export default function OrdersPage() {
                 onChange={(e) =>
                   setOverallCountingPeriod(
                     e.target.value as
-                      | 'day'
-                      | 'weekly'
-                      | 'monthly'
+                      | "day"
+                      | "weekly"
+                      | "monthly"
                   )
                 }
-                className="border p-3 w-full rounded-xl bg-white"
+                className="w-full border rounded-xl p-3 bg-white"
               >
 
                 <option value="day">
@@ -1579,10 +1412,12 @@ export default function OrdersPage() {
 
             </div>
 
+            {/* DATE */}
+
             <div>
 
               <label className="block text-sm font-semibold mb-2">
-                Select Date
+                Date
               </label>
 
               <input
@@ -1595,76 +1430,58 @@ export default function OrdersPage() {
                     e.target.value
                   )
                 }
-                className="border p-3 w-full rounded-xl bg-white"
+                className="w-full border rounded-xl p-3"
               />
 
             </div>
 
           </div>
 
-          {overallSelectedItem ? (
+          {/* COUNT RESULT */}
 
-            <div className="mt-5 border-2 border-indigo-500 rounded-2xl p-6 bg-indigo-50">
+          {overallSelectedItem && (
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
 
-                <div>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
 
-                  <div className="text-sm text-gray-500 mb-1">
-                    Selected Item
-                  </div>
-
-                  <div className="text-xl font-bold">
-                    {
-                      overallSelectedItem
-                    }
-                  </div>
-
+                <div className="text-sm text-gray-500">
+                  Selected Item
                 </div>
 
-                <div className="text-center">
-
-                  <div className="text-sm text-gray-500 mb-1">
-                    Quantity
-                  </div>
-
-                  <div className="text-4xl font-bold text-indigo-600">
-
-                    {
-                      overallSelectedItemCount.toLocaleString()
-                    }
-
-                  </div>
-
-                </div>
-
-                <div className="text-center md:text-right">
-
-                  <div className="text-sm text-gray-500 mb-1">
-                    Total Amount
-                  </div>
-
-                  <div className="text-2xl font-bold text-green-600">
-
-                    Rs.{' '}
-
-                    {
-                      overallSelectedItemAmount.toLocaleString()
-                    }
-
-                  </div>
-
+                <div className="font-bold text-xl mt-1">
+                  {overallSelectedItem}
                 </div>
 
               </div>
 
-            </div>
+              <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
 
-          ) : (
+                <div className="text-sm text-gray-500">
+                  Total Quantity
+                </div>
 
-            <div className="mt-5 text-center text-gray-500 border rounded-2xl p-8">
+                <div className="font-bold text-3xl text-green-600 mt-1">
+                  {selectedItemCount.toLocaleString()}
+                </div>
 
-              Please select an item
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
+
+                <div className="text-sm text-gray-500">
+                  Item Amount
+                </div>
+
+                <div className="font-bold text-2xl text-orange-600 mt-1">
+
+                  Rs{" "}
+
+                  {selectedItemAmount.toLocaleString()}
+
+                </div>
+
+              </div>
 
             </div>
 
@@ -1673,44 +1490,54 @@ export default function OrdersPage() {
         </div>
 
         {/* =====================================================
-            ORDERS
+            ORDERS LIST
         ===================================================== */}
 
         {loading ? (
 
-          <div className="bg-white rounded-xl shadow p-10 text-center">
-            Loading...
+          <div className="bg-white rounded-2xl shadow p-12 text-center">
+
+            <div className="text-lg font-semibold">
+              Loading orders...
+            </div>
+
+          </div>
+
+        ) : groupedOrders.length === 0 ? (
+
+          <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">
+
+            No orders found.
+
           </div>
 
         ) : (
 
-          <div className="space-y-6">
+          <div className="space-y-5">
 
             {groupedOrders.map(
               (group) => {
+
+                const groupKey =
+                  getGroupKey(
+                    group.customerName
+                  );
+
+                const expanded =
+                  !!expandedOrders[
+                    groupKey
+                  ];
 
                 const itemCounting =
                   getItemCounting(
                     group.items
                   );
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * Use saved/editable group total.
-                 */
-                const currentGroupTotal =
-                  Number(
-                    group.total || 0
-                  );
-
                 return (
 
                   <div
-                    key={
-                      group.groupKey
-                    }
-                    className="bg-white rounded-xl shadow overflow-hidden"
+                    key={groupKey}
+                    className="bg-white rounded-2xl shadow overflow-hidden"
                   >
 
                     {/* =================================================
@@ -1720,117 +1547,122 @@ export default function OrdersPage() {
                     <div
                       onClick={() =>
                         toggleExpand(
-                          group.groupKey
+                          groupKey
                         )
                       }
-                      className="p-6 bg-indigo-600 text-white flex justify-between cursor-pointer"
+                      className="bg-indigo-600 text-white p-5 cursor-pointer hover:bg-indigo-700"
                     >
 
-                      <div className="flex gap-3 items-center">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
 
-                        <User />
+                        <div className="flex items-center gap-3">
 
-                        <h2 className="text-xl font-bold">
+                          <div className="bg-white/20 p-2 rounded-lg">
 
-                          {
-                            group.customerName
-                          }
+                            <User
+                              size={22}
+                            />
 
-                        </h2>
+                          </div>
 
-                      </div>
+                          <div>
 
-                      <div className="flex items-center gap-6">
+                            <div className="text-xl font-bold">
 
-                        <div className="text-right">
+                              {
+                                group.customerName
+                              }
 
-                          <p className="text-sm">
-                            Total
-                          </p>
+                            </div>
 
-                          <p className="font-bold text-lg">
+                            <div className="text-sm text-indigo-100">
 
-                            Rs{' '}
+                              {
+                                group.items.length
+                              }{" "}
+                              items
 
-                            {
-                              currentGroupTotal.toLocaleString()
-                            }
+                            </div>
 
-                          </p>
+                          </div>
 
                         </div>
 
-                        {expandedOrders[
-                          group.groupKey
-                        ] ? (
-                          <ChevronUp />
-                        ) : (
-                          <ChevronDown />
-                        )}
+                        <div className="flex items-center gap-5">
+
+                          <div className="text-right">
+
+                            <div className="text-sm text-indigo-100">
+                              Total
+                            </div>
+
+                           <div className="text-sm text-white font-semibold">
+
+                          
+
+                            <span className="font-bold ml-2 text-white s">
+
+                              Rs{" "}
+
+                              {calculateItemsTotal(
+                                group.items
+                              ).toLocaleString()}
+
+                            </span>
+
+                          </div>
+
+                          </div>
+
+                          {expanded ? (
+                            <ChevronUp />
+                          ) : (
+                            <ChevronDown />
+                          )}
+
+                        </div>
 
                       </div>
 
                     </div>
 
                     {/* =================================================
-                        GROUP BODY
+                        GROUP CONTENT
                     ================================================= */}
 
-                    {expandedOrders[
-                      group.groupKey
-                    ] && (
+                    {expanded && (
 
-                      <div className="p-6">
+                      <div className="p-5">
 
                         {/* ITEM COUNTING */}
 
                         <div className="mb-6">
 
                           <h3 className="font-bold text-lg mb-3">
-
-                            {
-                              group.customerName
-                            }
-
-                            {' '} - Item Counting
-
+                            Item Counting
                           </h3>
 
-                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
 
                             {Object.entries(
                               itemCounting
                             ).map(
                               ([
-                                itemName,
+                                name,
                                 quantity,
                               ]) => (
 
                                 <div
-                                  key={
-                                    itemName
-                                  }
-                                  className="border rounded-xl p-3 bg-gray-50"
+                                  key={name}
+                                  className="bg-gray-50 border rounded-xl p-3"
                                 >
 
-                                  <div className="font-semibold text-sm min-h-[40px]">
-
-                                    {
-                                      itemName
-                                    }
-
+                                  <div className="text-sm font-semibold min-h-[40px]">
+                                    {name}
                                   </div>
 
-                                  <div className="text-xl font-bold text-indigo-600">
-
-                                    {
-                                      quantity
-                                    }
-
-                                  </div>
-
-                                  <div className="text-xs text-gray-500">
-                                    Quantity
+                                  <div className="text-2xl font-bold text-indigo-600 mt-1">
+                                    {quantity}
                                   </div>
 
                                 </div>
@@ -1842,118 +1674,145 @@ export default function OrdersPage() {
 
                         </div>
 
-                        {/* TABLE HEADER */}
+                        {/* ITEMS TABLE */}
 
-                        <div className="grid grid-cols-5 gap-4 border-b font-bold pb-2 mb-2">
+                        <div className="overflow-x-auto">
 
-                          <div>
-                            Date
-                          </div>
+                          <table className="w-full min-w-[700px]">
 
-                          <div>
-                            Item
-                          </div>
+                            <thead>
 
-                          <div>
-                            Qty/KG
-                          </div>
+                              <tr className="border-b bg-gray-50">
 
-                          <div>
-                            Price
-                          </div>
+                                <th className="text-left p-3">
+                                  Date
+                                </th>
 
-                          <div>
-                            Total Price
-                          </div>
+                                <th className="text-left p-3">
+                                  Item
+                                </th>
+
+                                <th className="text-right p-3">
+                                  Qty/KG
+                                </th>
+
+                                <th className="text-right p-3">
+                                  Price
+                                </th>
+
+                                <th className="text-right p-3">
+                                  Item Total
+                                </th>
+
+                              </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                              {group.items.map(
+                                (
+                                  item,
+                                  index
+                                ) => (
+
+                                  <tr
+                                    key={`${groupKey}-${index}`}
+                                    className="border-b"
+                                  >
+
+                                    <td className="p-3">
+
+                                      {item.createdAt
+                                        ? new Date(
+                                            item.createdAt
+                                          ).toLocaleDateString()
+                                        : "-"}
+
+                                    </td>
+
+                                    <td className="p-3 font-medium">
+                                      {item.name}
+                                    </td>
+
+                                    <td className="p-3 text-right">
+
+                                      {Number(
+                                        item.quantity || 0
+                                      )}
+
+                                    </td>
+
+                                    <td className="p-3 text-right">
+
+                                      Rs{" "}
+
+                                      {Number(
+                                        item.price || 0
+                                      ).toLocaleString()}
+
+                                    </td>
+
+                                    <td className="p-3 text-right font-bold">
+
+                                      Rs{" "}
+
+                                      {calculateItemTotal(
+                                        item
+                                      ).toLocaleString()}
+
+                                    </td>
+
+                                  </tr>
+
+                                )
+                              )}
+
+                            </tbody>
+
+                          </table>
 
                         </div>
 
-                        {/* ITEMS */}
-
-                        {group.items.map(
-                          (
-                            item,
-                            index
-                          ) => (
-
-                            <div
-                              key={`${group.groupKey}-${index}`}
-                              className="grid grid-cols-5 gap-4 border-b py-2 items-center"
-                            >
-
-                              <div>
-
-                                {item.orderDate
-                                  ? new Date(
-                                      item.orderDate
-                                    ).toLocaleDateString()
-                                  : '-'}
-
-                              </div>
-
-                              <div>
-                                {
-                                  item.name
-                                }
-                              </div>
-
-                              <div>
-                                {
-                                  item.quantity
-                                }
-                              </div>
-
-                              <div>
-
-                                Rs{' '}
-
-                                {Number(
-                                  item.price ||
-                                    0
-                                ).toLocaleString()}
-
-                              </div>
-
-                              <div className="font-bold">
-
-                                Rs{' '}
-
-                                {calculateItemTotal(
-                                  item
-                                ).toLocaleString()}
-
-                              </div>
-
-                            </div>
-
-                          )
-                        )}
-
                         {/* =================================================
-                            CUSTOMER TOTAL
+                            SAVED CUSTOMER TOTAL
                         ================================================= */}
 
-                        <div className="border-t mt-5 pt-4 flex justify-between items-center">
+                        <div className="mt-6 border-t pt-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 
-                          <span className="font-bold text-lg">
+                          <div>
 
-                            {
-                              group.customerName
-                            }
+                            {/* <div className="text-gray-500 text-sm">
+                              Customer Total
+                            </div> */}
 
-                            {' '} Total
+                            {/* <div className="text-2xl font-bold text-green-600">
 
-                          </span>
+                              Rs{" "}
 
-                          <span className="font-bold text-lg text-green-600">
+                              {Number(
+                                group.total || 0
+                              ).toLocaleString()}
 
-                            Rs{' '}
+                            </div> */}
 
-                            {
-                              currentGroupTotal.toLocaleString()
-                            }
+                          </div>
 
-                          </span>
+                          <div className="text-sm text-gray-500">
+
+                            Items calculated total:
+
+                            <span className="font-bold ml-2 text-gray-700">
+
+                              Rs{" "}
+
+                              {calculateItemsTotal(
+                                group.items
+                              ).toLocaleString()}
+
+                            </span>
+
+                          </div>
 
                         </div>
 
@@ -1961,17 +1820,16 @@ export default function OrdersPage() {
                             ACTION BUTTONS
                         ================================================= */}
 
-                        <div className="flex justify-end gap-3 mt-6">
+                        <div className="flex flex-wrap justify-end gap-3 mt-5">
 
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-
+                            type="button"
+                            onClick={() =>
                               handleEdit(
                                 group
-                              );
-                            }}
-                            className="bg-indigo-600 text-white px-5 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
+                              )
+                            }
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
                           >
 
                             <Pencil
@@ -1983,14 +1841,13 @@ export default function OrdersPage() {
                           </button>
 
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-
+                            type="button"
+                            onClick={() =>
                               handleDelete(
                                 group.customerName
-                              );
-                            }}
-                            className="bg-red-600 text-white px-5 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
+                              )
+                            }
+                            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
                           >
 
                             <Trash2
@@ -2002,14 +1859,13 @@ export default function OrdersPage() {
                           </button>
 
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-
+                            type="button"
+                            onClick={() =>
                               handlePrint(
                                 group
-                              );
-                            }}
-                            className="bg-green-600 text-white px-5 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
+                              )
+                            }
+                            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
                           >
 
                             <Printer
@@ -2032,17 +1888,6 @@ export default function OrdersPage() {
               }
             )}
 
-            {groupedOrders.length ===
-              0 && (
-
-              <div className="bg-white rounded-xl shadow p-10 text-center text-gray-500">
-
-                No orders found.
-
-              </div>
-
-            )}
-
           </div>
 
         )}
@@ -2055,41 +1900,52 @@ export default function OrdersPage() {
 
       {showModal && (
 
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
 
-          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl">
 
-            {/* =================================================
+            {/* ===================================================
                 MODAL HEADER
-            ================================================= */}
+            =================================================== */}
 
-            <div className="p-6 border-b flex justify-between items-center">
+            <div className="sticky top-0 z-10 bg-white border-b p-5 flex justify-between items-center">
 
-              <h2 className="text-2xl font-bold">
-                Edit Order
-              </h2>
+              <div>
+
+                <h2 className="text-2xl font-bold">
+                  Edit Order
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  Items and customer total are independent.
+                </p>
+
+              </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowModal(false);
-                  setEditingOrder(
-                    null
-                  );
+                  setEditingOrder(null);
                 }}
-                className="text-gray-500 hover:text-red-600 text-2xl"
+                className="p-2 rounded-lg hover:bg-gray-100"
               >
-                ×
+
+                <X
+                  size={24}
+                />
+
               </button>
 
             </div>
 
-            {/* =================================================
+            {/* ===================================================
                 MODAL BODY
-            ================================================= */}
+            =================================================== */}
 
-            <div className="p-6">
+            <div className="p-5">
 
-              {/* CUSTOMER NAME */}
+              {/* CUSTOMER */}
 
               <div className="mb-6">
 
@@ -2103,13 +1959,8 @@ export default function OrdersPage() {
                     formData.customerName
                   }
                   onChange={(e) =>
-                    setFormData(
-                      (previous) => ({
-                        ...previous,
-
-                        customerName:
-                          e.target.value,
-                      })
+                    updateCustomerName(
+                      e.target.value
                     )
                   }
                   className="w-full border-2 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -2117,193 +1968,211 @@ export default function OrdersPage() {
 
               </div>
 
+              {/* ITEMS HEADER */}
+
+              <div className="flex flex-col md:flex-row justify-between gap-3 items-start md:items-center mb-4">
+
+                <h3 className="text-xl font-bold">
+                  Items
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
+                >
+
+                  <Plus
+                    size={18}
+                  />
+
+                  Add Item
+
+                </button>
+
+              </div>
+
               {/* ITEMS */}
 
-              <div>
+              <div className="space-y-3">
 
-                <div className="flex justify-between items-center mb-4">
+                {formData.items.length === 0 ? (
 
-                  <h3 className="text-xl font-bold">
-                    Items
-                  </h3>
+                  <div className="border rounded-xl p-8 text-center text-gray-500">
+                    No items.
+                  </div>
 
-                  <button
-                    onClick={
-                      addItem
-                    }
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-                  >
+                ) : (
 
-                    <Plus
-                      size={18}
-                    />
-
-                    Add Item
-
-                  </button>
-
-                </div>
-
-                <div className="space-y-3">
-
-                  {formData.items.map(
+                  formData.items.map(
                     (
                       item,
                       index
                     ) => (
 
                       <div
-                        key={index}
-                        className="grid grid-cols-12 gap-3 items-center border rounded-xl p-3"
+                        key={
+                          item.id ??
+                          `new-${index}`
+                        }
+                        className="border rounded-2xl p-4"
                       >
 
-                        {/* ITEM */}
+                        <div className="grid grid-cols-12 gap-3 items-end">
 
-                        <div className="col-span-12 md:col-span-4">
+                          {/* ITEM */}
 
-                          <label className="text-xs text-gray-500">
-                            Item
-                          </label>
+                          <div className="col-span-12 md:col-span-4">
 
-                          <input
-                            value={
-                              item.name
-                            }
-                            onChange={(e) =>
-                              updateItem(
-                                index,
-                                'name',
-                                e.target.value
-                              )
-                            }
-                            placeholder="Item Name"
-                            className="w-full border rounded-lg p-2"
-                          />
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">
+                              Item
+                            </label>
 
-                        </div>
-
-                        {/* PRICE */}
-
-                        <div className="col-span-6 md:col-span-2">
-
-                          <label className="text-xs text-gray-500">
-                            Price
-                          </label>
-
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={
-                              item.price
-                            }
-                            onChange={(e) =>
-                              updateItem(
-                                index,
-                                'price',
-                                Number(
+                            <input
+                              type="text"
+                              value={
+                                item.name
+                              }
+                              onChange={(e) =>
+                                updateItem(
+                                  index,
+                                  "name",
                                   e.target.value
                                 )
-                              )
-                            }
-                            className="w-full border rounded-lg p-2"
-                          />
-
-                        </div>
-
-                        {/* QUANTITY */}
-
-                        <div className="col-span-6 md:col-span-2">
-
-                          <label className="text-xs text-gray-500">
-                            Qty/KG
-                          </label>
-
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={
-                              item.quantity
-                            }
-                            onChange={(e) =>
-                              updateItem(
-                                index,
-                                'quantity',
-                                Number(
-                                  e.target.value
-                                )
-                              )
-                            }
-                            className="w-full border rounded-lg p-2"
-                          />
-
-                        </div>
-
-                        {/* CALCULATED ITEM TOTAL */}
-
-                        <div className="col-span-10 md:col-span-3">
-
-                          <label className="text-xs text-gray-500">
-                            Item Total
-                          </label>
-
-                          <div className="font-bold text-green-600 border rounded-lg p-2 bg-green-50">
-
-                            Rs{' '}
-
-                            {calculateItemTotal(
-                              item
-                            ).toLocaleString()}
+                              }
+                              placeholder="Item name"
+                              className="w-full border rounded-xl p-3"
+                            />
 
                           </div>
 
-                        </div>
+                          {/* PRICE */}
 
-                        {/* DELETE */}
+                          <div className="col-span-6 md:col-span-2">
 
-                        <div className="col-span-2 md:col-span-1 flex justify-center">
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">
+                              Price
+                            </label>
 
-                          <button
-                            onClick={() =>
-                              removeItem(
-                                index
-                              )
-                            }
-                            className="text-red-600 hover:text-red-800"
-                          >
-
-                            <Trash2
-                              size={20}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={
+                                item.price
+                              }
+                              onChange={(e) =>
+                                updateItem(
+                                  index,
+                                  "price",
+                                  Number(
+                                    e.target.value
+                                  )
+                                )
+                              }
+                              className="w-full border rounded-xl p-3"
                             />
 
-                          </button>
+                          </div>
+
+                          {/* QTY */}
+
+                          <div className="col-span-6 md:col-span-2">
+
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">
+                              Quantity
+                            </label>
+
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={
+                                item.quantity
+                              }
+                              onChange={(e) =>
+                                updateItem(
+                                  index,
+                                  "quantity",
+                                  Number(
+                                    e.target.value
+                                  )
+                                )
+                              }
+                              className="w-full border rounded-xl p-3"
+                            />
+
+                          </div>
+
+                          {/* ITEM TOTAL */}
+
+                          <div className="col-span-10 md:col-span-3">
+
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">
+                              Item Calculated Total
+                            </label>
+
+                            <div className="w-full border rounded-xl p-3 bg-gray-50 font-bold">
+
+                              Rs{" "}
+
+                              {calculateItemTotal(
+                                item
+                              ).toLocaleString()}
+
+                            </div>
+
+                          </div>
+
+                          {/* DELETE */}
+
+                          <div className="col-span-2 md:col-span-1">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeItem(
+                                  index
+                                )
+                              }
+                              className="w-full p-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl"
+                            >
+
+                              <Trash2
+                                size={20}
+                                className="mx-auto"
+                              />
+
+                            </button>
+
+                          </div>
 
                         </div>
 
                       </div>
 
                     )
-                  )}
+                  )
 
-                </div>
+                )}
 
               </div>
 
               {/* =================================================
-                  EDITABLE TOTAL
+                  SAVED / EDITABLE TOTAL
               ================================================= */}
 
-              <div className="mt-8 border-2 border-indigo-500 rounded-2xl p-5 bg-indigo-50">
+              <div className="mt-7 border-2 border-indigo-500 bg-indigo-50 rounded-2xl p-5">
 
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                <div className="flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
 
                   <div>
 
-                    <h3 className="text-xl font-bold">
-                      Total
+                    <h3 className="text-xl font-bold text-indigo-900">
+                      Customer Total
                     </h3>
 
-                    <p className="text-sm text-gray-500 mt-1">
-                      You can manually change this total.
+                    <p className="text-sm text-indigo-700 mt-1">
+                      This total will NOT change when
+                      items are edited or deleted.
                     </p>
 
                   </div>
@@ -2321,11 +2190,11 @@ export default function OrdersPage() {
                         formData.total
                       }
                       onChange={(e) =>
-                        updateFormTotal(
+                        updateManualTotal(
                           e.target.value
                         )
                       }
-                      className="w-56 border-2 border-indigo-500 rounded-xl px-4 py-3 text-2xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-64 border-2 border-indigo-500 rounded-xl px-4 py-3 text-2xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
 
                   </div>
@@ -2335,54 +2204,82 @@ export default function OrdersPage() {
               </div>
 
               {/* =================================================
-                  CALCULATED ITEMS TOTAL
+                  COMPARISON
               ================================================= */}
 
-              <div className="mt-4 flex justify-between items-center bg-gray-50 rounded-xl p-4">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                <span className="font-semibold text-gray-600">
-                  Items Calculated Total
-                </span>
+                <div className="bg-gray-50 border rounded-xl p-4">
 
-                <span className="font-bold text-gray-700">
+                  <div className="text-sm text-gray-500">
+                    Items Calculated Total
+                  </div>
 
-                  Rs{' '}
+                  <div className="text-xl font-bold mt-1">
 
-                  {calculateItemsTotal(
-                    formData.items
-                  ).toLocaleString()}
+                    Rs{" "}
 
-                </span>
+                    {calculateItemsTotal(
+                      formData.items
+                    ).toLocaleString()}
+
+                  </div>
+
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+
+                  <div className="text-sm text-gray-500">
+                    Saved Customer Total
+                  </div>
+
+                  <div className="text-xl font-bold text-indigo-600 mt-1">
+
+                    Rs{" "}
+
+                    {Number(
+                      formData.total || 0
+                    ).toLocaleString()}
+
+                  </div>
+
+                </div>
 
               </div>
 
             </div>
 
-            {/* =================================================
+            {/* ===================================================
                 MODAL FOOTER
-            ================================================= */}
+            =================================================== */}
 
-            <div className="border-t p-6 flex justify-end gap-3">
+            <div className="sticky bottom-0 bg-white border-t p-5 flex flex-col sm:flex-row justify-end gap-3">
 
               <button
+                type="button"
+                disabled={saving}
                 onClick={() => {
                   setShowModal(false);
-                  setEditingOrder(
-                    null
-                  );
+                  setEditingOrder(null);
                 }}
-                className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600"
+                className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 font-semibold disabled:opacity-50"
               >
                 Cancel
               </button>
 
               <button
+                type="button"
+                disabled={saving}
                 onClick={
                   handleUpdateOrder
                 }
-                className="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700"
+                className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
               >
-                Save Changes
+
+                {saving
+                  ? "Saving..."
+                  : "Save Changes"}
+
               </button>
 
             </div>
@@ -2395,4 +2292,22 @@ export default function OrdersPage() {
 
     </div>
   );
+}
+
+// ============================================================
+// ESCAPE HTML FOR PRINT
+// ============================================================
+
+function escapeHtml(
+  value: string
+) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 }
