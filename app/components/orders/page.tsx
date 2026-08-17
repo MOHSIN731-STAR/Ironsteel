@@ -2203,56 +2203,17 @@ export default function OrdersPage() {
 
                   {/* CUSTOMER TOTAL */}
 
-                  <div className="border-2 border-green-500 bg-green-50 rounded-2xl p-5">
-
-                    <label className="block text-sm font-bold text-green-900 mb-2">
-                      Customer Total
-                    </label>
-
-                    <div className="flex items-center gap-2">
-
-                      <span className="font-bold text-lg">
-                        Rs
-                      </span>
-
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={
-                          formData.total
-                        }
-                        onChange={(e) =>
-                          setFormData(
-                            (previous) => ({
-                              ...previous,
-                              total:
-                                e.target.value ===
-                                ""
-                                  ? 0
-                                  : Number(
-                                      e.target.value
-                                    ),
-                            })
-                          )
-                        }
-                        className="w-full border-2 border-green-400 rounded-lg px-3 py-3 text-xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-
-                    </div>
-
-                  </div>
+                 
 
                   {/* ITEMS CALCULATED TOTAL */}
-
-                  <div className="border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
+<div className="flex justify-end">
+                  <div className="  border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
 
                     <label className="block text-sm font-bold text-blue-900 mb-1">
                       Items Calculated Total
                     </label>
 
-                    <p className="text-xs text-blue-600 mb-2">
-                      Editable
-                    </p>
+                    
 
                     <div className="flex items-center gap-2">
 
@@ -2293,8 +2254,8 @@ export default function OrdersPage() {
                     </div>
 
                   </div>
-
-                  {/* DIFFERENCE */}
+</div>
+                  {/* DIFFERENCE
 
                   <div className="border-2 border-orange-400 bg-orange-50 rounded-2xl p-5">
 
@@ -2318,7 +2279,7 @@ export default function OrdersPage() {
                       ).toLocaleString()}
                     </div>
 
-                  </div>
+                  </div> */}
 
                 </div>
 
