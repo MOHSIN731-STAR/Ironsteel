@@ -1,6 +1,120 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../lib/prisma";
+import { requireAuth } from "../../lib/authGuard";
 
+
+export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  try {
+    const body = await req.json();
+
+    if (!body.customerName?.trim()) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Customer name is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    const rawItems = Array.isArray(body.items)
+      ? body.items
+      : [];
+
+    const items = rawItems.map((item: any) => {
+      const price = Number(item.price) || 0;
+      const quantity = Number(item.quantity) || 0;
+
+      return {
+        name: item.name?.trim() || "",
+        price,
+        quantity,
+
+        // Item ka apna calculation
+        total: price * quantity,
+      };
+    });
+
+    // ========================================================
+    // NEW ORDER TOTAL
+    //
+    // POST par agar frontend total bhej raha hai to usko use
+    // karenge.
+    //
+    // Agar total nahi bheja gaya to items ka total calculate
+    // hoga.
+    // ========================================================
+
+    const calculatedTotal = items.reduce(
+      (sum: number, item: any) =>
+        sum + Number(item.total || 0),
+      0
+    );
+
+    const receivedTotal = Number(body.total);
+
+    const grandTotal = Number.isFinite(receivedTotal)
+      ? receivedTotal
+      : calculatedTotal;
+
+    // ========================================================
+    // CREATE ORDER
+    // ========================================================
+
+    const order = await prisma.order.create({
+      data: {
+        customerName: body.customerName.trim(),
+
+        // IMPORTANT:
+        // Saved order total
+        total: grandTotal,
+
+        ...(body.customer && {
+          customer: {
+            connect: {
+              id: Number(body.customer),
+            },
+          },
+        }),
+
+        items: {
+          create: items,
+        },
+      },
+
+      include: {
+        items: true,
+        customer: true,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        order,
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    console.error("POST Orders API Error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          error?.message ||
+          "Failed to create order",
+      },
+      { status: 500 }
+    );
+  }
+}
 // ============================================================
 // GET ORDERS
 // ============================================================
