@@ -61,7 +61,8 @@ model Order {
 
   customerName String
   total        Float
-
+  // Editable Items Calculated Total
+  itemsCalculatedTotal Float?
   items OrderItem[]
 
   createdAt DateTime @default(now())

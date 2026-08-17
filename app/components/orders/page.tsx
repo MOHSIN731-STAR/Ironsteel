@@ -13,20 +13,25 @@ import {
   X,
 } from "lucide-react";
 
+// ============================================================
+// TYPES
+// ============================================================
+
 interface Item {
   id?: number;
   name: string;
   price: number;
   quantity: number;
   total?: number;
-  createdAt?: string;
 }
 
 interface Order {
   id: number;
+  customerId?: number | null;
   customerName: string;
-  items: Item[];
   total: number;
+  itemsCalculatedTotal?: number | null;
+  items: Item[];
   createdAt: string;
   updatedAt?: string;
 }
@@ -36,108 +41,78 @@ interface GroupedOrder {
   customerName: string;
   items: Item[];
   total: number;
+  itemsCalculatedTotal: number;
   createdAt: string;
   updatedAt?: string;
   orderIds: number[];
 }
 
+// ============================================================
+// COMPONENT
+// ============================================================
+
 export default function OrdersPage() {
-  // =========================================================
-  // ORDERS
-  // =========================================================
+  // ==========================================================
+  // STATES
+  // ==========================================================
 
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
-  // =========================================================
-  // SEARCH / DATE
-  // =========================================================
+  const [expandedGroups, setExpandedGroups] =
+    useState<Record<string, boolean>>({});
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [showModal, setShowModal] = useState(false);
+
+  const [editingOrder, setEditingOrder] =
+    useState<GroupedOrder | null>(null);
+
+  // ==========================================================
+  // DATE FILTER STATES
+  // ==========================================================
+
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  // =========================================================
-  // EXPAND
-  // =========================================================
+  // ==========================================================
+  // ITEM COUNTING STATES
+  // ==========================================================
 
-  const [expandedOrders, setExpandedOrders] = useState<
-    Record<string, boolean>
-  >({});
+  const [selectedCountingItem, setSelectedCountingItem] =
+    useState("");
 
-  // =========================================================
-  // EDIT
-  // =========================================================
+  const [countingPeriod, setCountingPeriod] =
+    useState<"daily" | "weekly" | "monthly">("daily");
 
-  const [showModal, setShowModal] = useState(false);
-  const [editingOrder, setEditingOrder] =
-    useState<GroupedOrder | null>(null);
+  const [countingDate, setCountingDate] = useState("");
+
+  // ==========================================================
+  // FORM
+  // ==========================================================
 
   const [formData, setFormData] = useState<{
     customerName: string;
     items: Item[];
     total: number;
+    itemsCalculatedTotal: number;
   }>({
     customerName: "",
     items: [],
     total: 0,
+    itemsCalculatedTotal: 0,
   });
 
-  const [saving, setSaving] = useState(false);
-
-  // =========================================================
-  // OVERALL ITEM COUNTING
-  // =========================================================
-
-  const [overallSelectedItem, setOverallSelectedItem] =
-    useState("");
-
-  const [overallCountingPeriod, setOverallCountingPeriod] =
-    useState<"day" | "weekly" | "monthly">("day");
-
-  const [overallCountingDate, setOverallCountingDate] =
-    useState(new Date().toISOString().split("T")[0]);
-
-  // =========================================================
-  // ITEM TOTAL
-  // =========================================================
-
-  const calculateItemTotal = (item: Item) => {
-    return Number(item.price || 0) * Number(item.quantity || 0);
-  };
-
-  // =========================================================
-  // ITEMS CALCULATED TOTAL
-  //
-  // NOTE:
-  // This is only for display.
-  // It NEVER overwrites order.total.
-  // =========================================================
-
-  const calculateItemsTotal = (items: Item[]) => {
-    return items.reduce((sum, item) => {
-      return sum + calculateItemTotal(item);
-    }, 0);
-  };
-
-  // =========================================================
-  // NORMALIZE CUSTOMER NAME
-  // =========================================================
-
-  const getGroupKey = (name: string) => {
-    return name.trim().toLowerCase();
-  };
-
-  // =========================================================
+  // ==========================================================
   // FETCH ORDERS
-  // =========================================================
+  // ==========================================================
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
 
       const response = await fetch("/api/orders", {
-        method: "GET",
         cache: "no-store",
       });
 
@@ -149,137 +124,176 @@ export default function OrdersPage() {
         );
       }
 
-      const apiOrders: Order[] = (data.orders || []).map(
-        (order: any) => ({
+      const fetchedOrders: Order[] =
+        Array.isArray(data.orders)
+          ? data.orders
+          : Array.isArray(data.data)
+          ? data.data
+          : [];
+
+      const normalizedOrders = fetchedOrders.map((order) => {
+        const items = Array.isArray(order.items)
+          ? order.items.map((item) => {
+              const price = Number(item.price) || 0;
+              const quantity = Number(item.quantity) || 0;
+
+              return {
+                ...item,
+                price,
+                quantity,
+                total:
+                  item.total !== undefined &&
+                  item.total !== null
+                    ? Number(item.total)
+                    : price * quantity,
+              };
+            })
+          : [];
+
+        const calculatedFromItems = items.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.total || 0),
+          0
+        );
+
+        const savedCalculatedTotal =
+          order.itemsCalculatedTotal !== null &&
+          order.itemsCalculatedTotal !== undefined
+            ? Number(order.itemsCalculatedTotal)
+            : calculatedFromItems;
+
+        return {
           ...order,
+          total: Number(order.total) || 0,
+          items,
+          itemsCalculatedTotal: savedCalculatedTotal,
+        };
+      });
 
-          id: Number(order.id),
-
-          customerName: order.customerName || "",
-
-          total: Number(order.total || 0),
-
-          items: (order.items || []).map((item: any) => ({
-            ...item,
-
-            id:
-              item.id !== undefined
-                ? Number(item.id)
-                : undefined,
-
-            name: item.name || "",
-
-            price: Number(item.price || 0),
-
-            quantity: Number(item.quantity || 0),
-
-            total:
-              item.total !== undefined
-                ? Number(item.total)
-                : Number(item.price || 0) *
-                  Number(item.quantity || 0),
-
-            createdAt:
-              item.createdAt || order.createdAt,
-          })),
-        })
-      );
-
-      setOrders(apiOrders);
+      setOrders(normalizedOrders);
     } catch (error: any) {
       console.error("Fetch orders error:", error);
 
       alert(
-        error?.message || "Failed to load orders"
+        error?.message || "Failed to fetch orders"
       );
     } finally {
       setLoading(false);
     }
   };
 
+  // ==========================================================
+  // INITIAL LOAD
+  // ==========================================================
+
   useEffect(() => {
     fetchOrders();
   }, []);
 
-  // =========================================================
-  // DATE FILTER
-  // =========================================================
+  // ==========================================================
+  // CALCULATE ITEMS TOTAL
+  // ==========================================================
+
+  const calculateItemsTotal = (items: Item[]) => {
+    return items.reduce((sum, item) => {
+      const price = Number(item.price) || 0;
+      const quantity = Number(item.quantity) || 0;
+
+      return sum + price * quantity;
+    }, 0);
+  };
+
+  // ==========================================================
+  // FORMAT DATE
+  // ==========================================================
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "-";
+
+    const date = new Date(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  // ==========================================================
+  // DATE ONLY HELPER
+  // ==========================================================
+
+  const getDateOnly = (dateString: string) => {
+    const date = new Date(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year = date.getFullYear();
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  // ==========================================================
+  // DATE RANGE FILTER
+  // ==========================================================
 
   const dateFilteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const orderDate = new Date(order.createdAt);
+      const orderDate = getDateOnly(order.createdAt);
 
-      if (fromDate) {
-        const start = new Date(`${fromDate}T00:00:00`);
-
-        if (orderDate < start) {
-          return false;
-        }
+      if (!orderDate) {
+        return false;
       }
 
-      if (toDate) {
-        const end = new Date(`${toDate}T23:59:59.999`);
+      if (fromDate && orderDate < fromDate) {
+        return false;
+      }
 
-        if (orderDate > end) {
-          return false;
-        }
+      if (toDate && orderDate > toDate) {
+        return false;
       }
 
       return true;
     });
   }, [orders, fromDate, toDate]);
 
-  // =========================================================
-  // SEARCH
-  // =========================================================
+  // ==========================================================
+  // GROUP ORDERS BY CUSTOMER
+  // ==========================================================
 
-  const filteredOrders = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
-
-    if (!search) {
-      return dateFilteredOrders;
-    }
-
-    return dateFilteredOrders.filter((order) => {
-      const customerMatch = order.customerName
-        .toLowerCase()
-        .includes(search);
-
-      const itemMatch = order.items.some((item) =>
-        item.name.toLowerCase().includes(search)
-      );
-
-      return customerMatch || itemMatch;
-    });
-  }, [dateFilteredOrders, searchTerm]);
-
-  // =========================================================
-  // GROUP ORDERS FOR DISPLAY
-  //
-  // IMPORTANT:
-  //
-  // Each saved order.total is added exactly once.
-  //
-  // Example:
-  //
-  // Customer A order = 6000
-  // Customer B order = 4000
-  // New order = 5000
-  //
-  // Overall = 15000
-  //
-  // =========================================================
-
-  const groupedOrders = useMemo<GroupedOrder[]>(() => {
+  const groupedOrders = useMemo(() => {
     const map = new Map<string, GroupedOrder>();
 
-    filteredOrders.forEach((order) => {
-      const key = getGroupKey(order.customerName);
+    dateFilteredOrders.forEach((order) => {
+      const key = order.customerName
+        .trim()
+        .toLowerCase();
 
-      const items = (order.items || []).map((item) => ({
-        ...item,
-        createdAt: item.createdAt || order.createdAt,
-      }));
+      const items = Array.isArray(order.items)
+        ? order.items
+        : [];
+
+      const calculatedFromItems =
+        calculateItemsTotal(items);
+
+      const savedCalculatedTotal =
+        order.itemsCalculatedTotal !== null &&
+        order.itemsCalculatedTotal !== undefined
+          ? Number(order.itemsCalculatedTotal)
+          : calculatedFromItems;
 
       const existing = map.get(key);
 
@@ -287,8 +301,10 @@ export default function OrdersPage() {
         map.set(key, {
           id: order.id,
           customerName: order.customerName,
-          items,
-          total: Number(order.total || 0),
+          items: [...items],
+          total: Number(order.total) || 0,
+          itemsCalculatedTotal:
+            savedCalculatedTotal,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
           orderIds: [order.id],
@@ -299,288 +315,341 @@ export default function OrdersPage() {
           ...items,
         ];
 
-        existing.total += Number(order.total || 0);
+        existing.total +=
+          Number(order.total) || 0;
+
+        existing.itemsCalculatedTotal +=
+          savedCalculatedTotal;
 
         existing.orderIds.push(order.id);
 
         if (
-          new Date(order.createdAt) <
+          new Date(order.createdAt) >
           new Date(existing.createdAt)
         ) {
-          existing.createdAt = order.createdAt;
+          existing.createdAt =
+            order.createdAt;
         }
       }
     });
 
     return Array.from(map.values());
-  }, [filteredOrders]);
+  }, [dateFilteredOrders]);
 
-  // =========================================================
-  // OVERALL TOTAL
-  //
-  // Uses SAVED order totals.
-  //
-  // =========================================================
+  // ==========================================================
+  // SEARCH FILTER
+  // ==========================================================
 
-  const overallTotal = useMemo(() => {
-    return orders.reduce((sum, order) => {
-      return sum + Number(order.total || 0);
-    }, 0);
-  }, [orders]);
+  const filteredGroups = useMemo(() => {
+    const query = search
+      .trim()
+      .toLowerCase();
 
-  // =========================================================
-  // CUSTOMER GROUP COUNT
-  // =========================================================
+    if (!query) {
+      return groupedOrders;
+    }
 
-  const customerGroupCount = useMemo(() => {
-    const unique = new Set<string>();
+    return groupedOrders.filter((group) => {
+      const customerMatch =
+        group.customerName
+          .toLowerCase()
+          .includes(query);
+
+      const itemMatch =
+        group.items.some((item) =>
+          item.name
+            .toLowerCase()
+            .includes(query)
+        );
+
+      return customerMatch || itemMatch;
+    });
+  }, [groupedOrders, search]);
+
+  // ==========================================================
+  // ITEM LIST FOR COUNTING
+  // ==========================================================
+
+  const countingItems = useMemo(() => {
+    const map = new Map<string, string>();
 
     orders.forEach((order) => {
-      unique.add(getGroupKey(order.customerName));
-    });
+      if (!Array.isArray(order.items)) {
+        return;
+      }
 
-    return unique.size;
-  }, [orders]);
-
-  // =========================================================
-  // TOGGLE GROUP
-  // =========================================================
-
-  const toggleExpand = (key: string) => {
-    setExpandedOrders((previous) => ({
-      ...previous,
-      [key]: !previous[key],
-    }));
-  };
-
-  // =========================================================
-  // ITEM COUNTING
-  // =========================================================
-
-  const getItemCounting = (items: Item[]) => {
-    const result: Record<string, number> = {};
-
-    items.forEach((item) => {
-      const name = item.name.trim();
-
-      if (!name) return;
-
-      result[name] =
-        (result[name] || 0) +
-        Number(item.quantity || 0);
-    });
-
-    return result;
-  };
-
-  // =========================================================
-  // AVAILABLE ITEMS
-  // =========================================================
-
-  const availableItems = useMemo(() => {
-    const items = new Set<string>();
-
-    orders.forEach((order) => {
       order.items.forEach((item) => {
-        if (item.name.trim()) {
-          items.add(item.name.trim());
+        const name = String(
+          item.name || ""
+        ).trim();
+
+        if (!name) return;
+
+        const key = name.toLowerCase();
+
+        if (!map.has(key)) {
+          map.set(key, name);
         }
       });
     });
 
-    return Array.from(items).sort();
+    return Array.from(map.values()).sort(
+      (a, b) => a.localeCompare(b)
+    );
   }, [orders]);
 
-  useEffect(() => {
-    if (
-      availableItems.length > 0 &&
-      !overallSelectedItem
-    ) {
-      setOverallSelectedItem(availableItems[0]);
+  // ==========================================================
+  // COUNTING DATE RANGE
+  // ==========================================================
+
+  const getCountingDateRange = useMemo(() => {
+    if (!countingDate) {
+      return null;
     }
-  }, [availableItems, overallSelectedItem]);
 
-  // =========================================================
-  // COUNTING PERIOD FILTER
-  // =========================================================
+    const selected = new Date(
+      `${countingDate}T00:00:00`
+    );
 
-  const countingFilteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const orderDate = new Date(order.createdAt);
+    if (Number.isNaN(selected.getTime())) {
+      return null;
+    }
 
-      const selectedDate = new Date(
-        `${overallCountingDate}T00:00:00`
+    let start = new Date(selected);
+    let end = new Date(selected);
+
+    if (countingPeriod === "daily") {
+      start = new Date(selected);
+      end = new Date(selected);
+    }
+
+    if (countingPeriod === "weekly") {
+      const day = selected.getDay();
+
+      // Monday = 0
+      const mondayOffset =
+        day === 0 ? -6 : 1 - day;
+
+      start = new Date(selected);
+      start.setDate(
+        selected.getDate() +
+          mondayOffset
       );
 
-      if (overallCountingPeriod === "day") {
-        return (
-          orderDate.getFullYear() ===
-            selectedDate.getFullYear() &&
-          orderDate.getMonth() ===
-            selectedDate.getMonth() &&
-          orderDate.getDate() ===
-            selectedDate.getDate()
+      end = new Date(start);
+      end.setDate(
+        start.getDate() + 6
+      );
+    }
+
+    if (countingPeriod === "monthly") {
+      start = new Date(
+        selected.getFullYear(),
+        selected.getMonth(),
+        1
+      );
+
+      end = new Date(
+        selected.getFullYear(),
+        selected.getMonth() + 1,
+        0
+      );
+    }
+
+    const startString = getDateOnly(
+      start.toISOString()
+    );
+
+    const endString = getDateOnly(
+      end.toISOString()
+    );
+
+    return {
+      start: startString,
+      end: endString,
+    };
+  }, [countingDate, countingPeriod]);
+
+  // ==========================================================
+  // ITEM COUNTING RESULT
+  // ==========================================================
+
+  const itemCountingResult = useMemo(() => {
+    if (!selectedCountingItem) {
+      return {
+        quantity: 0,
+        totalAmount: 0,
+        orders: 0,
+      };
+    }
+
+    let filtered = orders;
+
+    // Global date filter
+    if (fromDate || toDate) {
+      filtered = filtered.filter((order) => {
+        const date = getDateOnly(
+          order.createdAt
         );
+
+        if (fromDate && date < fromDate) {
+          return false;
+        }
+
+        if (toDate && date > toDate) {
+          return false;
+        }
+
+        return true;
+      });
+    }
+
+    // Counting period/date filter
+    if (getCountingDateRange) {
+      filtered = filtered.filter((order) => {
+        const date = getDateOnly(
+          order.createdAt
+        );
+
+        return (
+          date >=
+            getCountingDateRange.start &&
+          date <=
+            getCountingDateRange.end
+        );
+      });
+    }
+
+    let quantity = 0;
+    let totalAmount = 0;
+    let matchingOrders = 0;
+
+    filtered.forEach((order) => {
+      if (!Array.isArray(order.items)) {
+        return;
       }
 
-      if (overallCountingPeriod === "monthly") {
-        return (
-          orderDate.getFullYear() ===
-            selectedDate.getFullYear() &&
-          orderDate.getMonth() ===
-            selectedDate.getMonth()
-        );
+      let orderHasItem = false;
+
+      order.items.forEach((item) => {
+        const itemName = String(
+          item.name || ""
+        )
+          .trim()
+          .toLowerCase();
+
+        const selectedName =
+          selectedCountingItem
+            .trim()
+            .toLowerCase();
+
+        if (itemName === selectedName) {
+          const itemQuantity =
+            Number(item.quantity) || 0;
+
+          const itemPrice =
+            Number(item.price) || 0;
+
+          quantity += itemQuantity;
+
+          totalAmount +=
+            itemPrice * itemQuantity;
+
+          orderHasItem = true;
+        }
+      });
+
+      if (orderHasItem) {
+        matchingOrders++;
       }
-
-      if (overallCountingPeriod === "weekly") {
-        const startOfWeek = new Date(selectedDate);
-
-        const day = startOfWeek.getDay();
-
-        const difference =
-          day === 0 ? -6 : 1 - day;
-
-        startOfWeek.setDate(
-          startOfWeek.getDate() + difference
-        );
-
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const endOfWeek = new Date(startOfWeek);
-
-        endOfWeek.setDate(
-          endOfWeek.getDate() + 6
-        );
-
-        endOfWeek.setHours(
-          23,
-          59,
-          59,
-          999
-        );
-
-        return (
-          orderDate >= startOfWeek &&
-          orderDate <= endOfWeek
-        );
-      }
-
-      return false;
     });
+
+    return {
+      quantity,
+      totalAmount,
+      orders: matchingOrders,
+    };
   }, [
     orders,
-    overallCountingDate,
-    overallCountingPeriod,
+    selectedCountingItem,
+    countingPeriod,
+    countingDate,
+    getCountingDateRange,
+    fromDate,
+    toDate,
   ]);
 
-  // =========================================================
-  // SELECTED ITEM COUNT
-  // =========================================================
+  // ==========================================================
+  // TOTAL ORDERS FOR COUNTING
+  // ==========================================================
 
-  const selectedItemCount = useMemo(() => {
-    if (!overallSelectedItem) return 0;
+  const countingTotalOrders = useMemo(() => {
+    let result = orders;
 
-    return countingFilteredOrders.reduce(
-      (sum, order) => {
-        const count = order.items
-          .filter(
-            (item) =>
-              item.name.trim() ===
-              overallSelectedItem
-          )
-          .reduce(
-            (itemSum, item) =>
-              itemSum +
-              Number(item.quantity || 0),
-            0
-          );
+    if (fromDate || toDate) {
+      result = result.filter((order) => {
+        const date = getDateOnly(
+          order.createdAt
+        );
 
-        return sum + count;
-      },
-      0
-    );
+        if (fromDate && date < fromDate) {
+          return false;
+        }
+
+        if (toDate && date > toDate) {
+          return false;
+        }
+
+        return true;
+      });
+    }
+
+    if (getCountingDateRange) {
+      result = result.filter((order) => {
+        const date = getDateOnly(
+          order.createdAt
+        );
+
+        return (
+          date >=
+            getCountingDateRange.start &&
+          date <=
+            getCountingDateRange.end
+        );
+      });
+    }
+
+    return result.length;
   }, [
-    countingFilteredOrders,
-    overallSelectedItem,
+    orders,
+    fromDate,
+    toDate,
+    getCountingDateRange,
   ]);
 
-  // =========================================================
-  // SELECTED ITEM AMOUNT
-  // =========================================================
+  // ==========================================================
+  // TOGGLE GROUP
+  // ==========================================================
 
-  const selectedItemAmount = useMemo(() => {
-    if (!overallSelectedItem) return 0;
-
-    return countingFilteredOrders.reduce(
-      (sum, order) => {
-        const amount = order.items
-          .filter(
-            (item) =>
-              item.name.trim() ===
-              overallSelectedItem
-          )
-          .reduce(
-            (itemSum, item) =>
-              itemSum +
-              calculateItemTotal(item),
-            0
-          );
-
-        return sum + amount;
-      },
-      0
-    );
-  }, [
-    countingFilteredOrders,
-    overallSelectedItem,
-  ]);
-
-  // =========================================================
-  // EDIT GROUP
-  //
-  // For a customer group, the frontend currently edits
-  // the first/selected order ID.
-  //
-  // If group contains only one order:
-  // perfect.
-  //
-  // =========================================================
-
-  const handleEdit = (group: GroupedOrder) => {
-    /*
-     * Important:
-     *
-     * group.total is the SAVED total.
-     *
-     * Do NOT use calculateItemsTotal(group.items).
-     */
-
-    setEditingOrder(group);
-
-    setFormData({
-      customerName: group.customerName,
-
-      items: group.items.map((item) => ({
-        ...item,
-      })),
-
-      total: Number(group.total || 0),
-    });
-
-    setShowModal(true);
+  const toggleGroup = (
+    customerName: string
+  ) => {
+    setExpandedGroups((previous) => ({
+      ...previous,
+      [customerName]:
+        !previous[customerName],
+    }));
   };
 
-  // =========================================================
+  // ==========================================================
   // ADD ITEM
-  // =========================================================
+  // ==========================================================
 
-  const addItem = () => {
+  const handleAddItem = () => {
     setFormData((previous) => ({
       ...previous,
-
       items: [
         ...previous.items,
-
         {
           name: "",
           price: 0,
@@ -588,583 +657,586 @@ export default function OrdersPage() {
           total: 0,
         },
       ],
-
-      /*
-       * TOTAL IS NOT CHANGED
-       */
-      total: previous.total,
     }));
   };
 
-  // =========================================================
-  // UPDATE ITEM
-  //
-  // IMPORTANT:
-  //
-  // Item update does NOT change total.
-  //
-  // =========================================================
+  // ==========================================================
+  // REMOVE ITEM
+  // ==========================================================
 
-  const updateItem = (
+  const handleRemoveItem = (
+    index: number
+  ) => {
+    setFormData((previous) => ({
+      ...previous,
+      items:
+        previous.items.filter(
+          (_, itemIndex) =>
+            itemIndex !== index
+        ),
+    }));
+  };
+
+  // ==========================================================
+  // UPDATE ITEM
+  // ==========================================================
+
+  const handleItemChange = (
     index: number,
-    field: keyof Item,
-    value: string | number
+    field:
+      | "name"
+      | "price"
+      | "quantity",
+    value: string
   ) => {
     setFormData((previous) => {
       const updatedItems = [
         ...previous.items,
       ];
 
-      updatedItems[index] = {
+      const currentItem = {
         ...updatedItems[index],
-        [field]: value,
       };
+
+      if (field === "name") {
+        currentItem.name = value;
+      } else if (field === "price") {
+        currentItem.price =
+          value === ""
+            ? 0
+            : Number(value);
+      } else {
+        currentItem.quantity =
+          value === ""
+            ? 0
+            : Number(value);
+      }
+
+      currentItem.total =
+        (Number(currentItem.price) || 0) *
+        (Number(currentItem.quantity) || 0);
+
+      updatedItems[index] = currentItem;
 
       return {
         ...previous,
-
         items: updatedItems,
-
-        /*
-         * VERY IMPORTANT
-         *
-         * Keep manually edited total.
-         */
-        total: previous.total,
       };
     });
   };
 
-  // =========================================================
-  // DELETE ITEM
-  //
-  // IMPORTANT:
-  //
-  // Item delete does NOT change total.
-  //
-  // =========================================================
+  // ==========================================================
+  // EDIT ORDER
+  // ==========================================================
 
-  const removeItem = (index: number) => {
-    setFormData((previous) => ({
-      ...previous,
+  const handleEdit = (
+    group: GroupedOrder
+  ) => {
+    setEditingOrder(group);
 
-      items: previous.items.filter(
-        (_, itemIndex) =>
-          itemIndex !== index
+    const fallbackTotal =
+      calculateItemsTotal(
+        group.items
+      );
+
+    setFormData({
+      customerName:
+        group.customerName,
+
+      items: group.items.map(
+        (item) => ({
+          ...item,
+        })
       ),
 
-      /*
-       * Keep total exactly same.
-       */
-      total: previous.total,
-    }));
+      total:
+        Number(group.total) || 0,
+
+      itemsCalculatedTotal:
+        group.itemsCalculatedTotal !==
+          null &&
+        group.itemsCalculatedTotal !==
+          undefined
+          ? Number(
+              group.itemsCalculatedTotal
+            )
+          : fallbackTotal,
+    });
+
+    setShowModal(true);
   };
 
-  // =========================================================
-  // UPDATE CUSTOMER NAME
-  // =========================================================
+  // ==========================================================
+  // UPDATE ORDER
+  // ==========================================================
 
-  const updateCustomerName = (
-    value: string
-  ) => {
-    setFormData((previous) => ({
-      ...previous,
-
-      customerName: value,
-
-      /*
-       * Total remains unchanged.
-       */
-      total: previous.total,
-    }));
-  };
-
-  // =========================================================
-  // UPDATE MANUAL TOTAL
-  //
-  // This is the ONLY place where formData.total changes
-  // intentionally.
-  // =========================================================
-
-  const updateManualTotal = (
-    value: string
-  ) => {
-    const numericValue =
-      value === ""
-        ? 0
-        : Number(value);
-
-    setFormData((previous) => ({
-      ...previous,
-
-      total: Number.isFinite(numericValue)
-        ? numericValue
-        : 0,
-    }));
-  };
-
-  // =========================================================
-  // SAVE / UPDATE ORDER
-  // =========================================================
-
-const handleUpdateOrder = async () => {
-  if (!editingOrder) return;
-
-  const finalTotal = Number(
-    formData.total
-  );
-
-  if (!formData.customerName.trim()) {
-    alert("Customer name is required");
-    return;
-  }
-
-  if (!Number.isFinite(finalTotal)) {
-    alert("Please enter a valid total");
-    return;
-  }
-
-  // ========================================================
-  // VERY IMPORTANT
-  //
-  // Send ALL orders belonging to this customer group.
-  //
-  // Example:
-  //
-  // Customer A:
-  // orderIds = [10, 15]
-  //
-  // API will merge them into ONE order.
-  // ========================================================
-
-  const orderIds =
-    editingOrder.orderIds &&
-    editingOrder.orderIds.length > 0
-      ? editingOrder.orderIds
-      : [editingOrder.id];
-
-  try {
-    setSaving(true);
-
-    const response = await fetch(
-      "/api/orders",
-      {
-        method: "PUT",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          // ⭐ ALL GROUP ORDER IDS
-          orderIds,
-
-          customerName:
-            formData.customerName.trim(),
-
-          // ⭐ CURRENT ITEMS ONLY
-          items: formData.items.map(
-            (item) => ({
-              name:
-                item.name.trim(),
-
-              price:
-                Number(item.price) || 0,
-
-              quantity:
-                Number(item.quantity) || 0,
-            })
-          ),
-
-          // ⭐ SAVED CUSTOMER TOTAL
-          //
-          // This is independent from item total.
-          total: finalTotal,
-        }),
+  const handleUpdateOrder =
+    async () => {
+      if (!editingOrder) {
+        return;
       }
-    );
 
-    const data =
-      await response.json();
+      const customerTotal =
+        Number(formData.total);
 
-    if (!response.ok || !data.success) {
-      throw new Error(
-        data.message ||
-          "Failed to update order"
-      );
-    }
+      const itemsCalculatedTotal =
+        Number(
+          formData.itemsCalculatedTotal
+        );
 
-    setShowModal(false);
-    setEditingOrder(null);
+      if (
+        !formData.customerName.trim()
+      ) {
+        alert(
+          "Customer name is required"
+        );
+        return;
+      }
 
-    // Fresh DB data
-    await fetchOrders();
+      if (
+        !Number.isFinite(
+          customerTotal
+        )
+      ) {
+        alert(
+          "Please enter a valid Customer Total"
+        );
+        return;
+      }
 
-    alert(
-      "Customer order updated successfully"
-    );
-  } catch (error: any) {
-    console.error(
-      "Update order error:",
-      error
-    );
+      if (
+        !Number.isFinite(
+          itemsCalculatedTotal
+        )
+      ) {
+        alert(
+          "Please enter a valid Items Calculated Total"
+        );
+        return;
+      }
 
-    alert(
-      error?.message ||
-        "Failed to update order"
-    );
-  } finally {
-    setSaving(false);
-  }
-};
+      try {
+        setSaving(true);
 
-  // =========================================================
-  // DELETE CUSTOMER
-  // =========================================================
+        const orderId =
+          editingOrder.id;
 
-  const handleDelete = async (
-    customerName: string
-  ) => {
-    const confirmed = window.confirm(
-      `Delete all orders of ${customerName}?`
-    );
+        const response = await fetch(
+          "/api/orders",
+          {
+            method: "PUT",
 
-    if (!confirmed) return;
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-    try {
-      const response = await fetch(
-        "/api/orders",
-        {
-          method: "DELETE",
+            body: JSON.stringify({
+              orderId,
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+              customerName:
+                formData.customerName.trim(),
 
-          body: JSON.stringify({
-            customerName,
-          }),
+              items:
+                formData.items.map(
+                  (item) => ({
+                    name:
+                      item.name.trim(),
+
+                    price:
+                      Number(
+                        item.price
+                      ) || 0,
+
+                    quantity:
+                      Number(
+                        item.quantity
+                      ) || 0,
+                  })
+                ),
+
+              total:
+                customerTotal,
+
+              itemsCalculatedTotal:
+                itemsCalculatedTotal,
+            }),
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !data.success
+        ) {
+          throw new Error(
+            data.message ||
+              "Failed to update order"
+          );
         }
-      );
 
-      const data =
-        await response.json();
+        setShowModal(false);
+        setEditingOrder(null);
 
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message ||
+        await fetchOrders();
+
+        alert(
+          "Order updated successfully"
+        );
+      } catch (error: any) {
+        console.error(
+          "Update order error:",
+          error
+        );
+
+        alert(
+          error?.message ||
+            "Failed to update order"
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  // ==========================================================
+  // DELETE GROUP
+  // ==========================================================
+
+  const handleDeleteGroup =
+    async (
+      group: GroupedOrder
+    ) => {
+      const confirmed =
+        window.confirm(
+          `Are you sure you want to delete all orders of ${group.customerName}?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        for (
+          const orderId of group.orderIds
+        ) {
+          const response =
+            await fetch(
+              "/api/orders",
+              {
+                method: "DELETE",
+
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+
+                body: JSON.stringify({
+                  orderId,
+                }),
+              }
+            );
+
+          const data =
+            await response.json();
+
+          if (
+            !response.ok ||
+            !data.success
+          ) {
+            throw new Error(
+              data.message ||
+                "Failed to delete order"
+            );
+          }
+        }
+
+        await fetchOrders();
+
+        alert(
+          "Customer orders deleted successfully"
+        );
+      } catch (error: any) {
+        console.error(
+          "Delete error:",
+          error
+        );
+
+        alert(
+          error?.message ||
             "Failed to delete orders"
         );
+      } finally {
+        setLoading(false);
       }
+    };
 
-      await fetchOrders();
-
-      alert(
-        "Customer orders deleted successfully"
-      );
-    } catch (error: any) {
-      console.error(
-        "Delete error:",
-        error
-      );
-
-      alert(
-        error?.message ||
-          "Failed to delete orders"
-      );
-    }
-  };
-
-  // =========================================================
+  // ==========================================================
   // PRINT
-  // =========================================================
+  // ==========================================================
 
   const handlePrint = (
     group: GroupedOrder
   ) => {
-    const printWindow =
-      window.open(
-        "",
-        "_blank",
-        "width=450,height=700"
-      );
-
-    if (!printWindow) {
-      alert(
-        "Please allow popups for printing."
-      );
-      return;
-    }
-
-    /*
-     * VERY IMPORTANT:
-     *
-     * Print saved group total.
-     * NOT calculated item total.
-     */
-    const printTotal =
-      Number(group.total || 0);
-
-    const dateText =
-      new Date(
-        group.createdAt
-      ).toLocaleDateString(
-        "en-GB",
-        {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        }
-      );
-
-    const itemsHtml =
+    const itemsRows =
       group.items
         .map(
           (item) => `
             <tr>
-              <td>
-                ${escapeHtml(item.name)}
-              </td>
-
-              <td class="right">
-                ${Number(
-                  item.price || 0
-                ).toLocaleString()}
-              </td>
-
-              <td class="right">
-                ${Number(
-                  item.quantity || 0
-                )}
-              </td>
-
-              <td class="right">
-                ${calculateItemTotal(
-                  item
-                ).toLocaleString()}
-              </td>
+              <td>${item.name}</td>
+              <td>${Number(
+                item.price
+              ).toLocaleString()}</td>
+              <td>${Number(
+                item.quantity
+              ).toLocaleString()}</td>
+              <td>${Number(
+                item.total ??
+                  Number(item.price) *
+                    Number(item.quantity)
+              ).toLocaleString()}</td>
             </tr>
           `
         )
         .join("");
 
+    const customerTotal =
+      Number(group.total) || 0;
+
+    const itemsCalculatedTotal =
+      Number(
+        group.itemsCalculatedTotal
+      ) || 0;
+
+    const difference =
+      customerTotal -
+      itemsCalculatedTotal;
+
+    const printWindow =
+      window.open(
+        "",
+        "_blank",
+        "width=400,height=700"
+      );
+
+    if (!printWindow) {
+      alert(
+        "Please allow popup to print"
+      );
+      return;
+    }
+
     printWindow.document.write(`
       <!DOCTYPE html>
-
       <html>
+        <head>
+          <title>Customer Order</title>
 
-      <head>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
 
-        <title>
-          ${escapeHtml(
-            group.customerName
-          )}
-        </title>
+            * {
+              box-sizing: border-box;
+            }
 
-        <style>
+            body {
+              margin: 0;
+              padding: 5mm;
+              width: 80mm;
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+              font-weight:bold;
+              color: #000;
+            }
 
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
+            .center {
+              text-align: center;
+            }
 
-          * {
-            box-sizing: border-box;
-          }
+            .title {
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 4px;
+            }
 
-          body {
-            width: 80mm;
-            margin: 0;
-            padding: 4mm;
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            color: #000;
-          }
+            .line {
+              border-top: 1px solid #000;
+              margin: 8px 0;
+            }
 
-          .shop-name {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 8px;
-          }
+            .customer {
+              font-size: 15px;
+              font-weight: bold;
+              margin: 8px 0;
+            }
 
-          .line {
-            border-top: 1px dashed #000;
-            margin: 7px 0;
-          }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-weight:bold;
+              font-size:12px;
+            }
 
-          .customer {
-            margin-bottom: 5px;
-            line-height: 1.6;
-          }
+            th,
+            td {
+              padding: 4px 2px;
+              border-bottom: 1px solid #999;
+              text-align: left;
+            }
 
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 11px;
-          }
+            th {
+              font-size: 11px;
+              font-weight: bold;
+            }
 
-          th,
-          td {
-            padding: 4px 2px;
-            border-bottom: 1px dashed #888;
-          }
+            .right {
+              text-align: right;
+              font-weight:bold;
+              font-size:16px;
+            }
 
-          th {
-            border-top: 1px solid #000;
-            border-bottom: 1px solid #000;
-          }
+            .total-row {
+              font-weight: bold;
+              font-size: 14px;
+            }
 
-          .right {
-            text-align: right;
-          }
+            .footer {
+              margin-top: 5px;
+              
+              font-size: 11px;
+            }
+              .footer .flex{
+                display: flex;
+                gap: 5px;}
+                .dox{
+                 font-size:12px;
+                 text-align:center;
+                }
 
-          .grand-total {
-            display: flex;
-            justify-content: space-between;
-            font-size: 16px;
-            font-weight: bold;
-            border-top: 1px solid #000;
-            padding-top: 8px;
-            margin-top: 8px;
-          }
+          </style>
+        </head>
 
-          .footer {
-            text-align: center;
-            margin-top: 15px;
-            line-height: 1.5;
-            font-weight: bold;
-          }
+        <body>
 
-        </style>
+          <div class="center title">
+            Customer Order
+          </div>
 
-      </head>
+          <div class="line"></div>
 
-      <body>
-
-        <div class="shop-name">
-          بسم اللہ آئرن سٹور
-        </div>
-
-        <div class="line"></div>
-
-        <div class="customer">
-
-          <div>
-            <strong>Customer:</strong>
-            ${escapeHtml(
-              group.customerName
-            )}
+          <div class="customer">
+            Customer: ${group.customerName}
           </div>
 
           <div>
-            <strong>Date:</strong>
-            ${dateText}
+            Date:
+            ${new Date(
+              group.createdAt
+            ).toLocaleString()}
           </div>
 
-        </div>
+          <div class="line"></div>
 
-        <table>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Total</th>
+              </tr>
+            </thead>
 
-          <thead>
+            <tbody>
+              ${itemsRows}
+            </tbody>
+          </table>
 
+          <div class="line"></div>
+
+          <table>
             <tr>
+              <td>
+                Items Calculated Total
+              </td>
 
-              <th>Item</th>
-
-              <th class="right">
-                Price
-              </th>
-
-              <th class="right">
-                Qty
-              </th>
-
-              <th class="right">
-                Total
-              </th>
-
+              <td class="right">
+                Rs ${itemsCalculatedTotal.toLocaleString()}
+              </td>
             </tr>
 
-          </thead>
+           
+           
+          </table>
 
-          <tbody>
+          <div class="footer">
+            <div className="flex gap-2">
+                    <p>Sign ___________</p>
+                    
+                  </div>
+                </div>
+              </div>
 
-            ${itemsHtml}
-
-          </tbody>
-
-        </table>
-
-        <div class="grand-total">
-
-          <span>
-            Total
-          </span>
-
-          <span>
-            Rs ${printTotal.toLocaleString()}
-          </span>
-
-        </div>
-
-        <div class="footer">
-
-          <div>
-            Shop Number
+              <h3 class="dox">
+                بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
+              </h3>
           </div>
 
-          <div>
-            0307-1038571
-          </div>
+          <script>
+            window.onload = function () {
+              window.print();
 
-          <br />
+              setTimeout(function () {
+                window.close();
+              }, 500);
+            };
+          </script>
 
-          <div>
-            بسم اللہ آئرن سٹور
-          </div>
-
-          <div>
-            جمالپور نزد ماہر والا
-          </div>
-
-          <div>
-            پٹرول پمپ قائم پور روڈ
-          </div>
-
-        </div>
-
-      </body>
-
+        </body>
       </html>
     `);
 
     printWindow.document.close();
-
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-      printWindow.close();
-    }, 500);
   };
 
-  // =========================================================
-  // RESET DATE
-  // =========================================================
+  // ==========================================================
+  // CLEAR DATES
+  // ==========================================================
 
   const clearDates = () => {
     setFromDate("");
     setToDate("");
   };
 
-  // =========================================================
+  // ==========================================================
+  // COUNTS
+  // ==========================================================
+
+  const totalCustomers =
+    groupedOrders.length;
+
+  const totalOrders =
+    dateFilteredOrders.length;
+
+  const totalItems =
+    groupedOrders.reduce(
+      (sum, group) =>
+        sum + group.items.length,
+      0
+    );
+
+  // ==========================================================
   // RENDER
-  // =========================================================
+  // ==========================================================
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
 
       <div className="max-w-7xl mx-auto">
 
@@ -1172,40 +1244,29 @@ const handleUpdateOrder = async () => {
             HEADER
         ===================================================== */}
 
-        <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border p-5 mb-6">
 
-          <div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
-            <h1 className="text-3xl font-bold text-gray-800">
-              Orders
-            </h1>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                Customer Orders
+              </h1>
 
-            <p className="text-gray-500 mt-1">
-              Customer orders and totals
-            </p>
+              <p className="text-gray-500 mt-1">
+                Manage customer orders
+              </p>
+            </div>
 
-          </div>
-
-          {/* SEARCH */}
-
-          <div className="relative w-full md:w-80">
-
-            <Search
-              size={20}
-              className="absolute left-3 top-3 text-gray-400"
-            />
-
-            <input
-              type="text"
-              placeholder="Search customer or item..."
-              value={searchTerm}
-              onChange={(e) =>
-                setSearchTerm(
-                  e.target.value
-                )
-              }
-              className="w-full bg-white border rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            <button
+              onClick={fetchOrders}
+              disabled={loading}
+              className="px-5 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading
+                ? "Loading..."
+                : "Refresh"}
+            </button>
 
           </div>
 
@@ -1215,13 +1276,36 @@ const handleUpdateOrder = async () => {
             DATE FILTER
         ===================================================== */}
 
-        <div className="bg-white rounded-2xl shadow p-5 mb-6">
+        <div className="bg-white border shadow-sm rounded-2xl p-5 mb-6">
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="flex items-center justify-between mb-4">
 
             <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Order Date Filter
+              </h2>
 
-              <label className="block font-semibold text-sm mb-2">
+              <p className="text-sm text-gray-500">
+                Filter orders by created date
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearDates}
+              className="px-4 py-2 rounded-xl bg-red-100 text-red-600 hover:bg-red-200 font-semibold"
+            >
+              Clear Date
+            </button>
+
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {/* FROM DATE */}
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 From Date
               </label>
 
@@ -1233,132 +1317,94 @@ const handleUpdateOrder = async () => {
                     e.target.value
                   )
                 }
-                className="w-full border rounded-xl p-3"
+                className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-
             </div>
 
-            <div>
+            {/* TO DATE */}
 
-              <label className="block font-semibold text-sm mb-2">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 To Date
               </label>
 
               <input
                 type="date"
                 value={toDate}
+                min={fromDate || undefined}
                 onChange={(e) =>
                   setToDate(
                     e.target.value
                   )
                 }
-                className="w-full border rounded-xl p-3"
+                className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-
             </div>
 
-            <button
-              onClick={clearDates}
-              className="bg-gray-200 hover:bg-gray-300 rounded-xl py-3 px-5 font-semibold"
-            >
-              Clear Dates
-            </button>
-
           </div>
+
+          {(fromDate || toDate) && (
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
+              Showing orders
+              {fromDate
+                ? ` from ${fromDate}`
+                : ""}
+              {toDate
+                ? ` to ${toDate}`
+                : ""}
+            </div>
+          )}
 
         </div>
 
         {/* =====================================================
-            OVERALL TOTAL CARDS
+            ITEM COUNTING
         ===================================================== */}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        <div className="bg-white border shadow-sm rounded-2xl p-5 mb-6">
 
-          {/* OVERALL TOTAL */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
 
-          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-indigo-600">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                Item Counting
+              </h2>
 
-            <div className="text-gray-500 text-sm font-semibold">
-              Overall Total
+              <p className="text-sm text-gray-500 mt-1">
+                Count quantity and total amount of a selected item
+              </p>
             </div>
 
-            <div className="text-3xl font-bold text-indigo-600 mt-2">
-
-              Rs{" "}
-
-              {overallTotal.toLocaleString()}
-
-            </div>
-
-          </div>
-
-          {/* CUSTOMER GROUPS */}
-
-          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-green-600">
-
-            <div className="text-gray-500 text-sm font-semibold">
-              Customer Groups
-            </div>
-
-            <div className="text-3xl font-bold text-green-600 mt-2">
-              {customerGroupCount}
+            <div className="text-sm font-semibold text-gray-700 bg-gray-100 px-4 py-2 rounded-xl">
+              Total Orders:
+              {countingTotalOrders}
             </div>
 
           </div>
-
-          {/* ORDERS */}
-
-          <div className="bg-white rounded-2xl shadow p-6 border-l-4 border-orange-500">
-
-            <div className="text-gray-500 text-sm font-semibold">
-              Total Orders
-            </div>
-
-            <div className="text-3xl font-bold text-orange-500 mt-2">
-              {orders.length}
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* =====================================================
-            OVERALL ITEM COUNTING
-        ===================================================== */}
-
-        <div className="bg-white rounded-2xl shadow p-6 mb-6">
-
-          <h2 className="text-2xl font-bold mb-5">
-            Overall Item Counting
-          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-            {/* ITEM */}
+            {/* SELECT ITEM */}
 
             <div>
-
-              <label className="block text-sm font-semibold mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Select Item
               </label>
 
               <select
-                value={
-                  overallSelectedItem
-                }
+                value={selectedCountingItem}
                 onChange={(e) =>
-                  setOverallSelectedItem(
+                  setSelectedCountingItem(
                     e.target.value
                   )
                 }
-                className="w-full border rounded-xl p-3 bg-white"
+                className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-
                 <option value="">
                   Select Item
                 </option>
 
-                {availableItems.map(
+                {countingItems.map(
                   (item) => (
                     <option
                       key={item}
@@ -1368,35 +1414,29 @@ const handleUpdateOrder = async () => {
                     </option>
                   )
                 )}
-
               </select>
-
             </div>
 
-            {/* PERIOD */}
+            {/* COUNTING PERIOD */}
 
             <div>
-
-              <label className="block text-sm font-semibold mb-2">
-                Period
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Counting Period
               </label>
 
               <select
-                value={
-                  overallCountingPeriod
-                }
-                onChange={(e) =>
-                  setOverallCountingPeriod(
+                value={countingPeriod}
+                onChange={(e) => {
+                  setCountingPeriod(
                     e.target.value as
-                      | "day"
+                      | "daily"
                       | "weekly"
                       | "monthly"
-                  )
-                }
-                className="w-full border rounded-xl p-3 bg-white"
+                  );
+                }}
+                className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-
-                <option value="day">
+                <option value="daily">
                   Daily
                 </option>
 
@@ -1407,622 +1447,626 @@ const handleUpdateOrder = async () => {
                 <option value="monthly">
                   Monthly
                 </option>
-
               </select>
-
             </div>
 
-            {/* DATE */}
+            {/* SELECT DATE */}
 
             <div>
-
-              <label className="block text-sm font-semibold mb-2">
-                Date
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Select Date
               </label>
 
               <input
                 type="date"
-                value={
-                  overallCountingDate
-                }
+                value={countingDate}
                 onChange={(e) =>
-                  setOverallCountingDate(
+                  setCountingDate(
                     e.target.value
                   )
                 }
-                className="w-full border rounded-xl p-3"
+                className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+          </div>
+
+          {/* COUNTING RESULT */}
+
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            {/* SELECTED ITEM */}
+
+            <div className="border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
+
+              <div className="text-sm font-semibold text-blue-700">
+                Selected Item
+              </div>
+
+              <div className="text-xl font-bold text-blue-950 mt-2">
+                {selectedCountingItem ||
+                  "Select Item"}
+              </div>
+
+            </div>
+
+            {/* QUANTITY */}
+
+            <div className="border-2 border-green-500 bg-green-50 rounded-2xl p-5">
+
+              <div className="text-sm font-semibold text-green-700">
+                {countingPeriod ===
+                "daily"
+                  ? "Daily Quantity"
+                  : countingPeriod ===
+                    "weekly"
+                  ? "Weekly Quantity"
+                  : "Monthly Quantity"}
+              </div>
+
+              <div className="text-3xl font-bold text-green-950 mt-2">
+                {Number(
+                  itemCountingResult.quantity
+                ).toLocaleString()}
+              </div>
+
+              <div className="text-xs text-green-700 mt-1">
+                Quantity
+              </div>
+
+            </div>
+
+            {/* TOTAL AMOUNT */}
+
+            <div className="border-2 border-orange-500 bg-orange-50 rounded-2xl p-5">
+
+              <div className="text-sm font-semibold text-orange-700">
+                Total Amount
+              </div>
+
+              <div className="text-2xl font-bold text-orange-950 mt-2">
+                Rs.{" "}
+                {Number(
+                  itemCountingResult.totalAmount
+                ).toLocaleString()}
+              </div>
+
+              <div className="text-xs text-orange-700 mt-1">
+                {itemCountingResult.orders} matching order
+                {itemCountingResult.orders !==
+                1
+                  ? "s"
+                  : ""}
+              </div>
 
             </div>
 
           </div>
 
-          {/* COUNT RESULT */}
-
-          {overallSelectedItem && (
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
-
-              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
-
-                <div className="text-sm text-gray-500">
-                  Selected Item
-                </div>
-
-                <div className="font-bold text-xl mt-1">
-                  {overallSelectedItem}
-                </div>
-
+          {countingDate &&
+            getCountingDateRange && (
+              <div className="mt-4 bg-gray-50 border rounded-xl p-3 text-sm text-gray-600">
+                Counting period:
+                <strong className="ml-1">
+                  {getCountingDateRange.start}
+                </strong>
+                {" "}to{" "}
+                <strong>
+                  {getCountingDateRange.end}
+                </strong>
               </div>
-
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
-
-                <div className="text-sm text-gray-500">
-                  Total Quantity
-                </div>
-
-                <div className="font-bold text-3xl text-green-600 mt-1">
-                  {selectedItemCount.toLocaleString()}
-                </div>
-
-              </div>
-
-              <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
-
-                <div className="text-sm text-gray-500">
-                  Item Amount
-                </div>
-
-                <div className="font-bold text-2xl text-orange-600 mt-1">
-
-                  Rs{" "}
-
-                  {selectedItemAmount.toLocaleString()}
-
-                </div>
-
-              </div>
-
-            </div>
-
-          )}
+            )}
 
         </div>
 
         {/* =====================================================
-            ORDERS LIST
+            STATS
         ===================================================== */}
 
-        {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
-          <div className="bg-white rounded-2xl shadow p-12 text-center">
+          <div className="bg-white rounded-2xl border shadow-sm p-5">
 
-            <div className="text-lg font-semibold">
-              Loading orders...
+            <div className="text-gray-500 text-sm">
+              Customers
+            </div>
+
+            <div className="text-3xl font-bold mt-2">
+              {totalCustomers}
             </div>
 
           </div>
 
-        ) : groupedOrders.length === 0 ? (
+          <div className="bg-white rounded-2xl border shadow-sm p-5">
 
-          <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">
+            <div className="text-gray-500 text-sm">
+              Orders
+            </div>
 
-            No orders found.
+            <div className="text-3xl font-bold mt-2">
+              {totalOrders}
+            </div>
 
           </div>
 
-        ) : (
+          <div className="bg-white rounded-2xl border shadow-sm p-5">
 
-          <div className="space-y-5">
+            <div className="text-gray-500 text-sm">
+              Items
+            </div>
 
-            {groupedOrders.map(
-              (group) => {
+            <div className="text-3xl font-bold mt-2">
+              {totalItems}
+            </div>
 
-                const groupKey =
-                  getGroupKey(
-                    group.customerName
-                  );
+          </div>
 
-                const expanded =
-                  !!expandedOrders[
-                    groupKey
-                  ];
+        </div>
 
-                const itemCounting =
-                  getItemCounting(
-                    group.items
-                  );
+        {/* =====================================================
+            SEARCH
+        ===================================================== */}
 
-                return (
+        <div className="bg-white border shadow-sm rounded-2xl p-4 mb-6">
 
-                  <div
-                    key={groupKey}
-                    className="bg-white rounded-2xl shadow overflow-hidden"
-                  >
+          <div className="relative">
 
-                    {/* =================================================
-                        GROUP HEADER
-                    ================================================= */}
+            <Search
+              size={20}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+            />
 
-                    <div
-                      onClick={() =>
-                        toggleExpand(
-                          groupKey
-                        )
-                      }
-                      className="bg-indigo-600 text-white p-5 cursor-pointer hover:bg-indigo-700"
-                    >
+            <input
+              type="text"
+              placeholder="Search customer or item..."
+              value={search}
+              onChange={(e) =>
+                setSearch(
+                  e.target.value
+                )
+              }
+              className="w-full border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
 
-                      <div className="flex flex-col md:flex-row justify-between gap-4">
+          </div>
 
-                        <div className="flex items-center gap-3">
+        </div>
 
-                          <div className="bg-white/20 p-2 rounded-lg">
+        {/* =====================================================
+            ORDERS
+        ===================================================== */}
 
-                            <User
-                              size={22}
-                            />
+        <div className="space-y-4">
 
+          {filteredGroups.length ===
+            0 && (
+            <div className="bg-white rounded-2xl border p-10 text-center text-gray-500">
+              No orders found
+            </div>
+          )}
+
+          {filteredGroups.map(
+            (group) => {
+              const isExpanded =
+                !!expandedGroups[
+                  group.customerName
+                ];
+
+              // const difference =
+              //   Number(group.total) -
+              //   Number(
+              //     group.itemsCalculatedTotal
+              //   );
+
+              return (
+                <div
+                  key={`${group.customerName}-${group.id}`}
+                  className="bg-white border rounded-2xl shadow-sm overflow-hidden"
+                >
+
+                  {/* GROUP HEADER */}
+
+                  <div className="p-5">
+
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+
+                          <User
+                            size={24}
+                            className="text-blue-600"
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <h2 className="text-xl font-bold text-gray-900">
+                            {
+                              group.customerName
+                            }
+                          </h2>
+
+                          <p className="text-sm text-gray-500">
+                            {
+                              group.items.length
+                            }{" "}
+                            item
+                            {group.items.length !==
+                            1
+                              ? "s"
+                              : ""}
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                      {/* TOTALS */}
+
+                      <div className="flex justify-end ">
+
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+
+                          <div className="text-xs text-blue-600 font-medium">
+                            Items Calculated Total
                           </div>
 
-                          <div>
-
-                            <div className="text-xl font-bold">
-
-                              {
-                                group.customerName
-                              }
-
-                            </div>
-
-                            <div className="text-sm text-indigo-100">
-
-                              {
-                                group.items.length
-                              }{" "}
-                              items
-
-                            </div>
-
+                          <div className="font-bold text-blue-900 mt-1">
+                            Rs{" "}
+                            {Number(
+                              group.itemsCalculatedTotal
+                            ).toLocaleString()}
                           </div>
 
                         </div>
 
-                        <div className="flex items-center gap-5">
+                   
 
-                          <div className="text-right">
+                        {/* <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
 
-                            <div className="text-sm text-indigo-100">
-                              Total
-                            </div>
-
-                           <div className="text-sm text-white font-semibold">
-
-                          
-
-                            <span className="font-bold ml-2 text-white s">
-
-                              Rs{" "}
-
-                              {calculateItemsTotal(
-                                group.items
-                              ).toLocaleString()}
-
-                            </span>
-
+                          <div className="text-xs text-orange-600 font-medium">
+                            Difference
                           </div>
 
+                          <div className="font-bold text-orange-900 mt-1">
+                            Rs{" "}
+                            {difference.toLocaleString()}
                           </div>
 
-                          {expanded ? (
-                            <ChevronUp />
-                          ) : (
-                            <ChevronDown />
-                          )}
-
-                        </div>
+                        </div> */}
 
                       </div>
 
                     </div>
 
-                    {/* =================================================
-                        GROUP CONTENT
-                    ================================================= */}
-
-                    {expanded && (
-
-                      <div className="p-5">
-
-                        {/* ITEM COUNTING */}
-
-                        <div className="mb-6">
-
-                          <h3 className="font-bold text-lg mb-3">
-                            Item Counting
-                          </h3>
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-
-                            {Object.entries(
-                              itemCounting
-                            ).map(
-                              ([
-                                name,
-                                quantity,
-                              ]) => (
-
-                                <div
-                                  key={name}
-                                  className="bg-gray-50 border rounded-xl p-3"
-                                >
-
-                                  <div className="text-sm font-semibold min-h-[40px]">
-                                    {name}
-                                  </div>
-
-                                  <div className="text-2xl font-bold text-indigo-600 mt-1">
-                                    {quantity}
-                                  </div>
-
-                                </div>
-
-                              )
-                            )}
-
-                          </div>
-
-                        </div>
-
-                        {/* ITEMS TABLE */}
-
-                        <div className="overflow-x-auto">
-
-                          <table className="w-full min-w-[700px]">
-
-                            <thead>
-
-                              <tr className="border-b bg-gray-50">
-
-                                <th className="text-left p-3">
-                                  Date
-                                </th>
-
-                                <th className="text-left p-3">
-                                  Item
-                                </th>
-
-                                <th className="text-right p-3">
-                                  Qty/KG
-                                </th>
-
-                                <th className="text-right p-3">
-                                  Price
-                                </th>
-
-                                <th className="text-right p-3">
-                                  Item Total
-                                </th>
-
-                              </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                              {group.items.map(
-                                (
-                                  item,
-                                  index
-                                ) => (
-
-                                  <tr
-                                    key={`${groupKey}-${index}`}
-                                    className="border-b"
-                                  >
-
-                                    <td className="p-3">
-
-                                      {item.createdAt
-                                        ? new Date(
-                                            item.createdAt
-                                          ).toLocaleDateString()
-                                        : "-"}
-
-                                    </td>
-
-                                    <td className="p-3 font-medium">
-                                      {item.name}
-                                    </td>
-
-                                    <td className="p-3 text-right">
-
-                                      {Number(
-                                        item.quantity || 0
-                                      )}
-
-                                    </td>
-
-                                    <td className="p-3 text-right">
-
-                                      Rs{" "}
-
-                                      {Number(
-                                        item.price || 0
-                                      ).toLocaleString()}
-
-                                    </td>
-
-                                    <td className="p-3 text-right font-bold">
-
-                                      Rs{" "}
-
-                                      {calculateItemTotal(
-                                        item
-                                      ).toLocaleString()}
-
-                                    </td>
-
-                                  </tr>
-
-                                )
-                              )}
-
-                            </tbody>
-
-                          </table>
-
-                        </div>
-
-                        {/* =================================================
-                            SAVED CUSTOMER TOTAL
-                        ================================================= */}
-
-                        <div className="mt-6 border-t pt-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-
-                          <div>
-
-                            {/* <div className="text-gray-500 text-sm">
-                              Customer Total
-                            </div> */}
-
-                            {/* <div className="text-2xl font-bold text-green-600">
-
-                              Rs{" "}
-
-                              {Number(
-                                group.total || 0
-                              ).toLocaleString()}
-
-                            </div> */}
-
-                          </div>
-
-                          <div className="text-sm text-gray-500">
-
-                            Items calculated total:
-
-                            <span className="font-bold ml-2 text-gray-700">
-
-                              Rs{" "}
-
-                              {calculateItemsTotal(
-                                group.items
-                              ).toLocaleString()}
-
-                            </span>
-
-                          </div>
-
-                        </div>
-
-                        {/* =================================================
-                            ACTION BUTTONS
-                        ================================================= */}
-
-                        <div className="flex flex-wrap justify-end gap-3 mt-5">
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleEdit(
-                                group
-                              )
-                            }
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
-                          >
-
-                            <Pencil
-                              size={18}
-                            />
-
-                            Edit
-
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDelete(
-                                group.customerName
-                              )
-                            }
-                            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
-                          >
-
-                            <Trash2
-                              size={18}
-                            />
-
-                            Delete
-
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handlePrint(
-                                group
-                              )
-                            }
-                            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
-                          >
-
-                            <Printer
-                              size={18}
-                            />
-
-                            Print
-
-                          </button>
-
-                        </div>
-
-                      </div>
-
-                    )}
+                    {/* ACTION BUTTONS */}
+
+                    <div className="flex flex-wrap gap-2 mt-5">
+
+                      <button
+                        onClick={() =>
+                          toggleGroup(
+                            group.customerName
+                          )
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-medium"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp
+                            size={18}
+                          />
+                        ) : (
+                          <ChevronDown
+                            size={18}
+                          />
+                        )}
+
+                        {isExpanded
+                          ? "Hide Items"
+                          : "Show Items"}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handleEdit(
+                            group
+                          )
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium"
+                      >
+                        <Pencil
+                          size={17}
+                        />
+
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handlePrint(
+                            group
+                          )
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-900 font-medium"
+                      >
+                        <Printer
+                          size={17}
+                        />
+
+                        Print
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handleDeleteGroup(
+                            group
+                          )
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 font-medium"
+                      >
+                        <Trash2
+                          size={17}
+                        />
+
+                        Delete
+                      </button>
+
+                    </div>
 
                   </div>
 
-                );
-              }
-            )}
+                  {/* ITEMS */}
 
-          </div>
+                  {isExpanded && (
+                    <div className="border-t bg-gray-50 p-5">
 
-        )}
+                      <div className="overflow-x-auto">
+
+                        <table className="w-full text-sm">
+
+                          <thead>
+
+                            <tr className="border-b text-left">
+
+                              <th className="p-3">
+                                #
+                              </th>
+
+                              <th className="p-3">
+                                Date
+                              </th>
+
+                              <th className="p-3">
+                                Item
+                              </th>
+
+                              <th className="p-3 text-right">
+                                Price
+                              </th>
+
+                              <th className="p-3 text-right">
+                                Quantity
+                              </th>
+
+                              <th className="p-3 text-right">
+                                Total
+                              </th>
+
+                            </tr>
+
+                          </thead>
+
+                          <tbody>
+
+                            {group.items.map(
+                              (
+                                item,
+                                index
+                              ) => (
+                                <tr
+                                  key={
+                                    item.id ??
+                                    `${group.id}-${index}`
+                                  }
+                                  className="border-b last:border-b-0"
+                                >
+
+                                  <td className="p-3">
+                                    {index +
+                                      1}
+                                  </td>
+
+                                  <td className="p-3 whitespace-nowrap">
+                                    {formatDate(
+                                      group.createdAt
+                                    )}
+                                  </td>
+
+                                  <td className="p-3 font-medium">
+                                    {
+                                      item.name
+                                    }
+                                  </td>
+
+                                  <td className="p-3 text-right">
+                                    Rs{" "}
+                                    {Number(
+                                      item.price
+                                    ).toLocaleString()}
+                                  </td>
+
+                                  <td className="p-3 text-right">
+                                    {Number(
+                                      item.quantity
+                                    ).toLocaleString()}
+                                  </td>
+
+                                  <td className="p-3 text-right font-semibold">
+                                    Rs{" "}
+                                    {Number(
+                                      item.total ??
+                                        Number(
+                                          item.price
+                                        ) *
+                                          Number(
+                                            item.quantity
+                                          )
+                                    ).toLocaleString()}
+                                  </td>
+
+                                </tr>
+                              )
+                            )}
+
+                          </tbody>
+
+                        </table>
+
+                      </div>
+
+                    </div>
+                  )}
+
+                </div>
+              );
+            }
+          )}
+
+        </div>
 
       </div>
 
-      {/* =========================================================
+      {/* ======================================================
           EDIT MODAL
-      ========================================================= */}
+      ====================================================== */}
 
-      {showModal && (
+      {showModal &&
+        editingOrder && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
 
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-5xl max-h-[95vh] overflow-y-auto rounded-2xl shadow-2xl">
 
-          <div className="bg-white w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl">
+              {/* MODAL HEADER */}
 
-            {/* ===================================================
-                MODAL HEADER
-            =================================================== */}
+              <div className="sticky top-0 z-10 bg-white border-b px-5 py-4 flex items-center justify-between">
 
-            <div className="sticky top-0 z-10 bg-white border-b p-5 flex justify-between items-center">
+                <div>
 
-              <div>
+                  <h2 className="text-xl md:text-2xl font-bold">
+                    Edit Customer Order
+                  </h2>
 
-                <h2 className="text-2xl font-bold">
-                  Edit Order
-                </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {
+                      editingOrder.customerName
+                    }
+                  </p>
 
-                <p className="text-sm text-gray-500 mt-1">
-                  Items and customer total are independent.
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingOrder(null);
-                }}
-                className="p-2 rounded-lg hover:bg-gray-100"
-              >
-
-                <X
-                  size={24}
-                />
-
-              </button>
-
-            </div>
-
-            {/* ===================================================
-                MODAL BODY
-            =================================================== */}
-
-            <div className="p-5">
-
-              {/* CUSTOMER */}
-
-              <div className="mb-6">
-
-                <label className="block font-semibold mb-2">
-                  Customer Name
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    formData.customerName
-                  }
-                  onChange={(e) =>
-                    updateCustomerName(
-                      e.target.value
-                    )
-                  }
-                  className="w-full border-2 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-
-              </div>
-
-              {/* ITEMS HEADER */}
-
-              <div className="flex flex-col md:flex-row justify-between gap-3 items-start md:items-center mb-4">
-
-                <h3 className="text-xl font-bold">
-                  Items
-                </h3>
+                </div>
 
                 <button
-                  type="button"
-                  onClick={addItem}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-semibold"
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingOrder(null);
+                  }}
+                  className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
                 >
-
-                  <Plus
-                    size={18}
-                  />
-
-                  Add Item
-
+                  <X size={20} />
                 </button>
 
               </div>
 
-              {/* ITEMS */}
+              <div className="p-5">
 
-              <div className="space-y-3">
+                {/* CUSTOMER NAME */}
 
-                {formData.items.length === 0 ? (
+                <div className="mb-5">
 
-                  <div className="border rounded-xl p-8 text-center text-gray-500">
-                    No items.
+                  <label className="block text-sm font-semibold mb-2">
+                    Customer Name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      formData.customerName
+                    }
+                    onChange={(e) =>
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
+                          customerName:
+                            e.target.value,
+                        })
+                      )
+                    }
+                    className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+
+                </div>
+
+                {/* ITEMS */}
+
+                <div className="border rounded-2xl overflow-hidden mb-5">
+
+                  <div className="bg-gray-50 border-b px-4 py-3 flex items-center justify-between">
+
+                    <div>
+
+                      <h3 className="font-bold text-lg">
+                        Items
+                      </h3>
+
+                      <p className="text-xs text-gray-500">
+                        Item total is calculated from price × quantity.
+                      </p>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleAddItem
+                      }
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+                    >
+                      <Plus
+                        size={17}
+                      />
+
+                      Add Item
+                    </button>
+
                   </div>
 
-                ) : (
+                  <div className="p-4 space-y-3">
 
-                  formData.items.map(
-                    (
-                      item,
-                      index
-                    ) => (
+                    {formData.items
+                      .length === 0 && (
+                      <div className="text-center text-gray-500 py-6">
+                        No items
+                      </div>
+                    )}
 
-                      <div
-                        key={
-                          item.id ??
-                          `new-${index}`
-                        }
-                        className="border rounded-2xl p-4"
-                      >
+                    {formData.items.map(
+                      (
+                        item,
+                        index
+                      ) => (
+                        <div
+                          key={
+                            item.id ??
+                            `new-${index}`
+                          }
+                          className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border rounded-xl p-3"
+                        >
 
-                        <div className="grid grid-cols-12 gap-3 items-end">
+                          {/* ITEM NAME */}
 
-                          {/* ITEM */}
-
-                          <div className="col-span-12 md:col-span-4">
+                          <div className="md:col-span-5">
 
                             <label className="block text-xs font-semibold text-gray-500 mb-1">
                               Item
@@ -2033,22 +2077,23 @@ const handleUpdateOrder = async () => {
                               value={
                                 item.name
                               }
-                              onChange={(e) =>
-                                updateItem(
+                              onChange={(
+                                e
+                              ) =>
+                                handleItemChange(
                                   index,
                                   "name",
                                   e.target.value
                                 )
                               }
-                              placeholder="Item name"
-                              className="w-full border rounded-xl p-3"
+                              className="w-full border rounded-lg px-3 py-2"
                             />
 
                           </div>
 
                           {/* PRICE */}
 
-                          <div className="col-span-6 md:col-span-2">
+                          <div className="md:col-span-2">
 
                             <label className="block text-xs font-semibold text-gray-500 mb-1">
                               Price
@@ -2060,23 +2105,23 @@ const handleUpdateOrder = async () => {
                               value={
                                 item.price
                               }
-                              onChange={(e) =>
-                                updateItem(
+                              onChange={(
+                                e
+                              ) =>
+                                handleItemChange(
                                   index,
                                   "price",
-                                  Number(
-                                    e.target.value
-                                  )
+                                  e.target.value
                                 )
                               }
-                              className="w-full border rounded-xl p-3"
+                              className="w-full border rounded-lg px-3 py-2"
                             />
 
                           </div>
 
-                          {/* QTY */}
+                          {/* QUANTITY */}
 
-                          <div className="col-span-6 md:col-span-2">
+                          <div className="md:col-span-2">
 
                             <label className="block text-xs font-semibold text-gray-500 mb-1">
                               Quantity
@@ -2088,226 +2133,248 @@ const handleUpdateOrder = async () => {
                               value={
                                 item.quantity
                               }
-                              onChange={(e) =>
-                                updateItem(
+                              onChange={(
+                                e
+                              ) =>
+                                handleItemChange(
                                   index,
                                   "quantity",
-                                  Number(
-                                    e.target.value
-                                  )
+                                  e.target.value
                                 )
                               }
-                              className="w-full border rounded-xl p-3"
+                              className="w-full border rounded-lg px-3 py-2"
                             />
 
                           </div>
 
                           {/* ITEM TOTAL */}
 
-                          <div className="col-span-10 md:col-span-3">
+                          <div className="md:col-span-2">
 
                             <label className="block text-xs font-semibold text-gray-500 mb-1">
-                              Item Calculated Total
+                              Total
                             </label>
 
-                            <div className="w-full border rounded-xl p-3 bg-gray-50 font-bold">
-
+                            <div className="border rounded-lg px-3 py-2 bg-gray-50 font-semibold text-right">
                               Rs{" "}
-
-                              {calculateItemTotal(
-                                item
+                              {(
+                                Number(
+                                  item.price
+                                ) *
+                                Number(
+                                  item.quantity
+                                )
                               ).toLocaleString()}
-
                             </div>
 
                           </div>
 
                           {/* DELETE */}
 
-                          <div className="col-span-2 md:col-span-1">
+                          <div className="md:col-span-1">
 
                             <button
                               type="button"
                               onClick={() =>
-                                removeItem(
+                                handleRemoveItem(
                                   index
                                 )
                               }
-                              className="w-full p-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl"
+                              className="w-full h-10 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center"
                             >
-
                               <Trash2
-                                size={20}
-                                className="mx-auto"
+                                size={18}
                               />
-
                             </button>
 
                           </div>
 
                         </div>
+                      )
+                    )}
 
-                      </div>
+                  </div>
 
-                    )
-                  )
+                </div>
 
-                )}
+                {/* TOTALS */}
 
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-              {/* =================================================
-                  SAVED / EDITABLE TOTAL
-              ================================================= */}
+                  {/* CUSTOMER TOTAL */}
 
-              <div className="mt-7 border-2 border-indigo-500 bg-indigo-50 rounded-2xl p-5">
+                  <div className="border-2 border-green-500 bg-green-50 rounded-2xl p-5">
 
-                <div className="flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
-
-                  <div>
-
-                    <h3 className="text-xl font-bold text-indigo-900">
+                    <label className="block text-sm font-bold text-green-900 mb-2">
                       Customer Total
-                    </h3>
+                    </label>
 
-                    <p className="text-sm text-indigo-700 mt-1">
-                      This total will NOT change when
-                      items are edited or deleted.
+                    <div className="flex items-center gap-2">
+
+                      <span className="font-bold text-lg">
+                        Rs
+                      </span>
+
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={
+                          formData.total
+                        }
+                        onChange={(e) =>
+                          setFormData(
+                            (previous) => ({
+                              ...previous,
+                              total:
+                                e.target.value ===
+                                ""
+                                  ? 0
+                                  : Number(
+                                      e.target.value
+                                    ),
+                            })
+                          )
+                        }
+                        className="w-full border-2 border-green-400 rounded-lg px-3 py-3 text-xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+
+                    </div>
+
+                  </div>
+
+                  {/* ITEMS CALCULATED TOTAL */}
+
+                  <div className="border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
+
+                    <label className="block text-sm font-bold text-blue-900 mb-1">
+                      Items Calculated Total
+                    </label>
+
+                    <p className="text-xs text-blue-600 mb-2">
+                      Editable
                     </p>
 
+                    <div className="flex items-center gap-2">
+
+                      <span className="font-bold text-lg">
+                        Rs
+                      </span>
+
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={
+                          formData.itemsCalculatedTotal
+                        }
+                        onChange={(e) => {
+                          const value =
+                            e.target.value ===
+                            ""
+                              ? 0
+                              : Number(
+                                  e.target.value
+                                );
+
+                          setFormData(
+                            (previous) => ({
+                              ...previous,
+                              itemsCalculatedTotal:
+                                Number.isFinite(
+                                  value
+                                )
+                                  ? value
+                                  : 0,
+                            })
+                          );
+                        }}
+                        className="w-full border-2 border-blue-400 rounded-lg px-3 py-3 text-xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                    </div>
+
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  {/* DIFFERENCE */}
 
-                    <span className="text-xl font-bold">
-                      Rs
-                    </span>
+                  <div className="border-2 border-orange-400 bg-orange-50 rounded-2xl p-5">
 
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={
-                        formData.total
-                      }
-                      onChange={(e) =>
-                        updateManualTotal(
-                          e.target.value
+                    <div className="text-sm font-bold text-orange-900">
+                      Difference
+                    </div>
+
+                    <p className="text-xs text-orange-600 mb-2">
+                      Customer Total − Items Calculated Total
+                    </p>
+
+                    <div className="text-2xl font-bold text-orange-900 mt-3">
+                      Rs{" "}
+                      {(
+                        Number(
+                          formData.total
+                        ) -
+                        Number(
+                          formData.itemsCalculatedTotal
                         )
-                      }
-                      className="w-64 border-2 border-indigo-500 rounded-xl px-4 py-3 text-2xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                      ).toLocaleString()}
+                    </div>
 
                   </div>
+
+                </div>
+
+                {/* NOTE */}
+
+                <div className="mt-5 bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+
+                  <strong>
+                    Note:
+                  </strong>{" "}
+                  Items Calculated Total is
+                  manually editable. Changing
+                  item price or quantity will
+                  not automatically change this
+                  value.
 
                 </div>
 
               </div>
 
-              {/* =================================================
-                  COMPARISON
-              ================================================= */}
+              {/* MODAL FOOTER */}
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="sticky bottom-0 bg-white border-t px-5 py-4 flex flex-col sm:flex-row justify-end gap-3">
 
-                <div className="bg-gray-50 border rounded-xl p-4">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingOrder(null);
+                  }}
+                  className="px-5 py-3 rounded-xl border border-gray-300 hover:bg-gray-100 font-semibold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
 
-                  <div className="text-sm text-gray-500">
-                    Items Calculated Total
-                  </div>
-
-                  <div className="text-xl font-bold mt-1">
-
-                    Rs{" "}
-
-                    {calculateItemsTotal(
-                      formData.items
-                    ).toLocaleString()}
-
-                  </div>
-
-                </div>
-
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-
-                  <div className="text-sm text-gray-500">
-                    Saved Customer Total
-                  </div>
-
-                  <div className="text-xl font-bold text-indigo-600 mt-1">
-
-                    Rs{" "}
-
-                    {Number(
-                      formData.total || 0
-                    ).toLocaleString()}
-
-                  </div>
-
-                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={
+                    handleUpdateOrder
+                  }
+                  className="px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-semibold disabled:opacity-50"
+                >
+                  {saving
+                    ? "Saving..."
+                    : "Save Changes"}
+                </button>
 
               </div>
-
-            </div>
-
-            {/* ===================================================
-                MODAL FOOTER
-            =================================================== */}
-
-            <div className="sticky bottom-0 bg-white border-t p-5 flex flex-col sm:flex-row justify-end gap-3">
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingOrder(null);
-                }}
-                className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 font-semibold disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={
-                  handleUpdateOrder
-                }
-                className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
-              >
-
-                {saving
-                  ? "Saving..."
-                  : "Save Changes"}
-
-              </button>
 
             </div>
 
           </div>
-
-        </div>
-
-      )}
+        )}
 
     </div>
   );
-}
-
-// ============================================================
-// ESCAPE HTML FOR PRINT
-// ============================================================
-
-function escapeHtml(
-  value: string
-) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(
-      /'/g,
-      "&#039;"
-    );
 }
