@@ -1044,41 +1044,10 @@ export default function CustomerItemsPage() {
 
         <div class="summary">
 
-          <div class="summary-row overall-total">
+          
 
-            <span>
-              Over All Total Amount
-            </span>
-
-            <span>
-              Rs. ${overallTotal.toLocaleString()}
-            </span>
-
-          </div>
-
-          <div class="summary-row overall-paid">
-
-            <span>
-              OverAll Paid Amount
-            </span>
-
-            <span>
-              Rs. ${overallPaid.toLocaleString()}
-            </span>
-
-          </div>
-
-          <div class="summary-row overall-remaining">
-
-            <span>
-              Over All Remaining Amount
-            </span>
-
-            <span>
-              Rs. ${overallRemaining.toLocaleString()}
-            </span>
-
-          </div>
+          
+          
 
         </div>
 
