@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
       paidPrice,
     } = body;
 
-    // =========================
-    // VALIDATION
-    // =========================
+    // ==================================================
+    // CUSTOMER VALIDATION
+    // ==================================================
 
     if (!customerName?.trim()) {
       return NextResponse.json(
@@ -77,6 +77,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ==================================================
+    // ITEM VALIDATION
+    // ==================================================
+
     if (!item) {
       return NextResponse.json(
         {
@@ -89,15 +93,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newQuantity = Number(quantity) || 0;
-    const newPrice = Number(price) || 0;
-    const newPaidPrice = Number(paidPrice) || 0;
+    // ==================================================
+    // VALUES
+    // IMPORTANT:
+    // Quantity can be 0
+    // Price can be 0
+    // Paid can be greater than total
+    // ==================================================
 
-    if (newQuantity <= 0) {
+    const newQuantity =
+      quantity === undefined ||
+      quantity === null ||
+      quantity === ""
+        ? 0
+        : Number(quantity);
+
+    const newPrice =
+      price === undefined ||
+      price === null ||
+      price === ""
+        ? 0
+        : Number(price);
+
+    const newPaidPrice =
+      paidPrice === undefined ||
+      paidPrice === null ||
+      paidPrice === ""
+        ? 0
+        : Number(paidPrice);
+
+    // ==================================================
+    // NUMBER VALIDATION
+    // Only invalid numbers are rejected.
+    // 0 IS VALID.
+    // ==================================================
+
+    if (!Number.isFinite(newQuantity)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Quantity must be greater than 0",
+          message: "Invalid quantity",
         },
         {
           status: 400,
@@ -105,11 +140,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPrice <= 0) {
+    if (!Number.isFinite(newPrice)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Price must be greater than 0",
+          message: "Invalid price",
         },
         {
           status: 400,
@@ -117,11 +152,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPaidPrice > newQuantity * newPrice) {
+    if (!Number.isFinite(newPaidPrice)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Paid amount cannot be greater than total price",
+          message: "Invalid paid amount",
         },
         {
           status: 400,
@@ -129,44 +164,103 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // =========================
+    // ==================================================
+    // NEGATIVE VALUES NOT ALLOWED
+    // ZERO IS ALLOWED
+    // ==================================================
+
+    if (newQuantity < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quantity cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPrice < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Price cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPaidPrice < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Paid amount cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ==================================================
     // CALCULATIONS
-    // =========================
+    // ==================================================
 
-    const totalPrice = newQuantity * newPrice;
+    const totalPrice =
+      newQuantity * newPrice;
 
     const remainingPrice =
       totalPrice - newPaidPrice;
 
-    // =========================
+    // ==================================================
     // CREATE
-    // =========================
+    // ==================================================
 
     const createdItem =
       await prisma.customerItem.create({
         data: {
-          customerName: customerName.trim(),
+          customerName:
+            customerName.trim(),
+
           item,
-          quantity: newQuantity,
-          price: newPrice,
+
+          quantity:
+            newQuantity,
+
+          price:
+            newPrice,
+
           totalPrice,
-          paidPrice: newPaidPrice,
+
+          paidPrice:
+            newPaidPrice,
+
           remainingPrice,
         },
       });
 
     return NextResponse.json({
       success: true,
-      message: "Customer item added successfully",
+
+      message:
+        "Customer item added successfully",
+
       data: createdItem,
     });
   } catch (error) {
-    console.error("POST Customer Item Error:", error);
+    console.error(
+      "POST Customer Item Error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to create customer item",
+        message:
+          "Failed to create customer item",
       },
       {
         status: 500,
@@ -198,9 +292,9 @@ export async function PUT(request: NextRequest) {
       paidPrice,
     } = body;
 
-    // =========================
+    // ==================================================
     // ID VALIDATION
-    // =========================
+    // ==================================================
 
     if (!id) {
       return NextResponse.json(
@@ -214,9 +308,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // =========================
+    // ==================================================
     // FIND EXISTING
-    // =========================
+    // ==================================================
 
     const existingItem =
       await prisma.customerItem.findUnique({
@@ -229,7 +323,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Customer item not found",
+          message:
+            "Customer item not found",
         },
         {
           status: 404,
@@ -237,34 +332,40 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // =========================
+    // ==================================================
     // NEW VALUES
-    // =========================
+    // ==================================================
 
     const newQuantity =
-      quantity !== undefined
+      quantity !== undefined &&
+      quantity !== null &&
+      quantity !== ""
         ? Number(quantity)
         : existingItem.quantity;
 
     const newPrice =
-      price !== undefined
+      price !== undefined &&
+      price !== null &&
+      price !== ""
         ? Number(price)
         : existingItem.price;
 
     const newPaidPrice =
-      paidPrice !== undefined
+      paidPrice !== undefined &&
+      paidPrice !== null &&
+      paidPrice !== ""
         ? Number(paidPrice)
         : existingItem.paidPrice;
 
-    // =========================
-    // VALIDATION
-    // =========================
+    // ==================================================
+    // NUMBER VALIDATION
+    // ==================================================
 
-    if (newQuantity <= 0) {
+    if (!Number.isFinite(newQuantity)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Quantity must be greater than 0",
+          message: "Invalid quantity",
         },
         {
           status: 400,
@@ -272,11 +373,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (newPrice <= 0) {
+    if (!Number.isFinite(newPrice)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Price must be greater than 0",
+          message: "Invalid price",
         },
         {
           status: 400,
@@ -284,9 +385,65 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // =========================
+    if (!Number.isFinite(newPaidPrice)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid paid amount",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ==================================================
+    // NEGATIVE VALUES NOT ALLOWED
+    // ZERO IS ALLOWED
+    // ==================================================
+
+    if (newQuantity < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Quantity cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPrice < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Price cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (newPaidPrice < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Paid amount cannot be negative",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ==================================================
     // CALCULATIONS
-    // =========================
+    // ==================================================
 
     const totalPrice =
       newQuantity * newPrice;
@@ -294,22 +451,9 @@ export async function PUT(request: NextRequest) {
     const remainingPrice =
       totalPrice - newPaidPrice;
 
-    if (newPaidPrice > totalPrice) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Paid amount cannot be greater than total price",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // =========================
+    // ==================================================
     // UPDATE
-    // =========================
+    // ==================================================
 
     const updatedItem =
       await prisma.customerItem.update({
@@ -328,18 +472,27 @@ export async function PUT(request: NextRequest) {
               ? item
               : existingItem.item,
 
-          quantity: newQuantity,
-          price: newPrice,
+          quantity:
+            newQuantity,
+
+          price:
+            newPrice,
+
           totalPrice,
-          paidPrice: newPaidPrice,
+
+          paidPrice:
+            newPaidPrice,
+
           remainingPrice,
         },
       });
 
     return NextResponse.json({
       success: true,
+
       message:
         "Customer item updated successfully",
+
       data: updatedItem,
     });
   } catch (error) {
@@ -382,15 +535,16 @@ export async function PATCH(request: NextRequest) {
       overallRemaining,
     } = body;
 
-    // =========================
-    // VALIDATION
-    // =========================
+    // ==================================================
+    // CUSTOMER VALIDATION
+    // ==================================================
 
     if (!customerName?.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message: "Customer name is required",
+          message:
+            "Customer name is required",
         },
         {
           status: 400,
@@ -398,19 +552,29 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const total = Number(overallTotal);
-    const paid = Number(overallPaid);
-    const remaining = Number(overallRemaining);
+    const total =
+      Number(overallTotal);
+
+    const paid =
+      Number(overallPaid);
+
+    const remaining =
+      Number(overallRemaining);
+
+    // ==================================================
+    // NUMBER VALIDATION
+    // ==================================================
 
     if (
-      Number.isNaN(total) ||
-      Number.isNaN(paid) ||
-      Number.isNaN(remaining)
+      !Number.isFinite(total) ||
+      !Number.isFinite(paid) ||
+      !Number.isFinite(remaining)
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid overall values",
+          message:
+            "Invalid overall values",
         },
         {
           status: 400,
@@ -418,7 +582,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (total < 0 || paid < 0 || remaining < 0) {
+    // ==================================================
+    // NEGATIVE NOT ALLOWED
+    // ZERO ALLOWED
+    // ==================================================
+
+    if (
+      total < 0 ||
+      paid < 0 ||
+      remaining < 0
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -431,29 +604,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (paid > total) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Overall paid cannot be greater than overall total",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // =========================
+    // ==================================================
     // CALCULATE REMAINING
-    // =========================
+    // ==================================================
 
     const calculatedRemaining =
       total - paid;
 
-    // =========================
+    // ==================================================
     // FIND CUSTOMER RECORDS
-    // =========================
+    // ==================================================
 
     const customerItems =
       await prisma.customerItem.findMany({
@@ -476,10 +636,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // =========================
+    // ==================================================
     // SAVE OVERALL VALUES
-    // ON ALL CUSTOMER RECORDS
-    // =========================
+    // ==================================================
 
     await prisma.customerItem.updateMany({
       where: {
@@ -488,8 +647,12 @@ export async function PATCH(request: NextRequest) {
       },
 
       data: {
-        overallTotal: total,
-        overallPaid: paid,
+        overallTotal:
+          total,
+
+        overallPaid:
+          paid,
+
         overallRemaining:
           calculatedRemaining,
       },
@@ -505,9 +668,11 @@ export async function PATCH(request: NextRequest) {
         customerName:
           customerName.trim(),
 
-        overallTotal: total,
+        overallTotal:
+          total,
 
-        overallPaid: paid,
+        overallPaid:
+          paid,
 
         overallRemaining:
           calculatedRemaining,
@@ -588,6 +753,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+
       message:
         "Customer item deleted successfully",
     });

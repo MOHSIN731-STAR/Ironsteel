@@ -32,11 +32,10 @@ export default function CustomerItemsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
 
   // ======================================================
-  // OVERALL UPDATE MODAL
+  // OVERALL MODAL
   // ======================================================
 
-  const [showOverallModal, setShowOverallModal] =
-    useState(false);
+  const [showOverallModal, setShowOverallModal] = useState(false);
 
   const [overallModal, setOverallModal] =
     useState<OverallModal>({
@@ -58,7 +57,7 @@ export default function CustomerItemsPage() {
   });
 
   // ======================================================
-  // FORM CALCULATIONS
+  // CALCULATIONS
   // ======================================================
 
   const quantity = Number(form.quantity) || 0;
@@ -67,11 +66,10 @@ export default function CustomerItemsPage() {
 
   const totalPrice = quantity * price;
 
-  const remainingPrice =
-    totalPrice - paidPrice;
+  const remainingPrice = totalPrice - paidPrice;
 
   // ======================================================
-  // GET
+  // GET ITEMS
   // ======================================================
 
   const fetchItems = async () => {
@@ -89,6 +87,8 @@ export default function CustomerItemsPage() {
 
       if (result.success) {
         setItems(result.data || []);
+      } else {
+        setItems([]);
       }
     } catch (error) {
       console.error("Fetch error:", error);
@@ -108,8 +108,7 @@ export default function CustomerItemsPage() {
   const groupedItems =
     items.reduce<Record<string, CustomerItem[]>>(
       (groups, item) => {
-        const customer =
-          item.customerName.trim();
+        const customer = item.customerName.trim();
 
         if (!groups[customer]) {
           groups[customer] = [];
@@ -123,56 +122,47 @@ export default function CustomerItemsPage() {
     );
 
   // ======================================================
-  // GET CUSTOMER OVERALL
+  // CUSTOMER OVERALL
   // ======================================================
 
   const getCustomerOverall = (
     customerItems: CustomerItem[]
   ) => {
-    const savedOverall =
-      customerItems.find(
-        (item) =>
-          item.overallTotal !== null &&
-          item.overallTotal !== undefined
-      );
+    const savedOverall = customerItems.find(
+      (item) =>
+        item.overallTotal !== null &&
+        item.overallTotal !== undefined
+    );
 
     if (savedOverall) {
+      const total =
+        Number(savedOverall.overallTotal) || 0;
+
+      const paid =
+        Number(savedOverall.overallPaid) || 0;
+
+      const remaining =
+        savedOverall.overallRemaining !== null &&
+        savedOverall.overallRemaining !== undefined
+          ? Number(savedOverall.overallRemaining)
+          : total - paid;
+
       return {
-        total:
-          Number(
-            savedOverall.overallTotal
-          ) || 0,
-
-        paid:
-          Number(
-            savedOverall.overallPaid
-          ) || 0,
-
-        remaining:
-          Number(
-            savedOverall.overallRemaining
-          ) ||
-          (
-            Number(
-              savedOverall.overallTotal
-            ) -
-            Number(
-              savedOverall.overallPaid
-            )
-          ),
+        total,
+        paid,
+        remaining,
       };
     }
 
-    // Old records without saved overall
     const total = customerItems.reduce(
       (sum, item) =>
-        sum + Number(item.totalPrice),
+        sum + Number(item.totalPrice || 0),
       0
     );
 
     const paid = customerItems.reduce(
       (sum, item) =>
-        sum + Number(item.paidPrice),
+        sum + Number(item.paidPrice || 0),
       0
     );
 
@@ -192,14 +182,16 @@ export default function CustomerItemsPage() {
       HTMLInputElement | HTMLSelectElement
     >
   ) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   // ======================================================
-  // UPDATE OVERALL MODAL CHANGE
+  // OVERALL CHANGE
   // ======================================================
 
   const handleOverallChange = (
@@ -234,7 +226,7 @@ export default function CustomerItemsPage() {
   };
 
   // ======================================================
-  // OVERALL MODAL CALCULATION
+  // MODAL CALCULATION
   // ======================================================
 
   const modalTotal =
@@ -247,11 +239,11 @@ export default function CustomerItemsPage() {
     modalTotal - modalPaid;
 
   // ======================================================
-  // SAVE OVERALL PRICE
+  // UPDATE OVERALL
   // ======================================================
 
   const handleUpdateOverall = async () => {
-    if (!overallModal.customerName) {
+    if (!overallModal.customerName.trim()) {
       alert("Customer name is required");
       return;
     }
@@ -285,14 +277,13 @@ export default function CustomerItemsPage() {
           },
           body: JSON.stringify({
             customerName:
-              overallModal.customerName,
+              overallModal.customerName.trim(),
 
             overallTotal: modalTotal,
 
             overallPaid: modalPaid,
 
-            overallRemaining:
-              modalRemaining,
+            overallRemaining: modalRemaining,
           }),
         }
       );
@@ -320,16 +311,14 @@ export default function CustomerItemsPage() {
         error
       );
 
-      alert(
-        "Failed to update overall price"
-      );
+      alert("Failed to update overall price");
     } finally {
       setLoading(false);
     }
   };
 
   // ======================================================
-  // POST / UPDATE ITEM
+  // POST / PUT ITEM
   // ======================================================
 
   const handleSubmit = async (
@@ -337,33 +326,79 @@ export default function CustomerItemsPage() {
   ) => {
     e.preventDefault();
 
+    // ====================================================
+    // CUSTOMER NAME REQUIRED
+    // ====================================================
+
     if (!form.customerName.trim()) {
       alert("Customer name is required");
       return;
     }
 
-    if (
-      !form.quantity ||
-      Number(form.quantity) <= 0
-    ) {
-      alert("Enter valid quantity");
+    // ====================================================
+    // IMPORTANT:
+    // QUANTITY CAN BE 0
+    // PRICE CAN BE 0
+    // TOTAL CAN BE 0
+    //
+    // Example:
+    // Customer = Ali
+    // Item = amount Jama
+    // Quantity = 0
+    // Price = 0
+    // Paid = 50000
+    //
+    // THIS IS VALID
+    // ====================================================
+
+    const currentQuantity =
+      Number(form.quantity || 0);
+
+    const currentPrice =
+      Number(form.price || 0);
+
+    const currentPaid =
+      Number(form.paidPrice || 0);
+
+    // ====================================================
+    // ONLY NEGATIVE VALUES ARE INVALID
+    // ====================================================
+
+    if (currentQuantity < 0) {
+      alert("Quantity cannot be negative");
       return;
     }
 
-    if (
-      !form.price ||
-      Number(form.price) <= 0
-    ) {
-      alert("Enter valid price");
+    if (currentPrice < 0) {
+      alert("Price cannot be negative");
       return;
     }
 
-    if (paidPrice > totalPrice) {
-      alert(
-        "Paid amount cannot be greater than total price"
-      );
+    if (currentPaid < 0) {
+      alert("Paid amount cannot be negative");
       return;
     }
+
+    // ====================================================
+    // TOTAL
+    // ====================================================
+
+    const currentTotal =
+      currentQuantity * currentPrice;
+
+    // ====================================================
+    // PAID CAN ALSO BE GREATER THAN ITEM TOTAL
+    //
+    // Because your use case allows:
+    //
+    // Quantity = 0
+    // Price = 0
+    // Total = 0
+    // Paid = 50000
+    //
+    // So DO NOT block:
+    // paid > total
+    // ====================================================
 
     try {
       setLoading(true);
@@ -372,8 +407,7 @@ export default function CustomerItemsPage() {
         form.customerName.trim();
 
       // ==================================================
-      // IMPORTANT:
-      // BEFORE ADDING NEW RECORD, GET CURRENT OVERALL
+      // GET CURRENT CUSTOMER OVERALL
       // ==================================================
 
       const existingCustomerItems =
@@ -391,37 +425,40 @@ export default function CustomerItemsPage() {
             };
 
       // ==================================================
-      // POST / PUT
+      // REQUEST BODY
       // ==================================================
 
       const body = {
-        ...(editingId && {
-          id: editingId,
-        }),
+        ...(editingId !== null
+          ? { id: editingId }
+          : {}),
 
         customerName,
 
         item: form.item,
 
-        quantity:
-          Number(form.quantity),
+        quantity: currentQuantity,
 
-        price:
-          Number(form.price),
+        price: currentPrice,
 
-        paidPrice:
-          Number(form.paidPrice) || 0,
+        paidPrice: currentPaid,
       };
+
+      // ==================================================
+      // POST / PUT
+      // ==================================================
 
       const response = await fetch(
         "/api/customer-items",
         {
-          method: editingId
-            ? "PUT"
-            : "POST",
+          method:
+            editingId !== null
+              ? "PUT"
+              : "POST",
 
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
 
           body: JSON.stringify(body),
@@ -439,25 +476,25 @@ export default function CustomerItemsPage() {
       }
 
       // ==================================================
-      // NEW RECORD
-      // ADD NEW PRICE TO SAVED UPDATED OVERALL
+      // NEW ITEM
+      // ADD ITEM TOTAL + PAID TO OVERALL
       // ==================================================
 
-      if (!editingId) {
+      if (editingId === null) {
         const newOverallTotal =
           oldOverall.total +
-          totalPrice;
+          currentTotal;
 
         const newOverallPaid =
           oldOverall.paid +
-          paidPrice;
+          currentPaid;
 
         const newOverallRemaining =
           newOverallTotal -
           newOverallPaid;
 
         // ================================================
-        // SAVE NEW OVERALL INTO DATABASE
+        // SAVE OVERALL
         // ================================================
 
         const overallResponse =
@@ -547,7 +584,7 @@ export default function CustomerItemsPage() {
   };
 
   // ======================================================
-  // DELETE
+  // DELETE ITEM
   // ======================================================
 
   const handleDelete = async (
@@ -607,7 +644,7 @@ export default function CustomerItemsPage() {
   };
 
   // ======================================================
-  // DELETE FULL CUSTOMER GROUP
+  // DELETE CUSTOMER GROUP
   // ======================================================
 
   const handleDeleteGroup = async (
@@ -692,7 +729,7 @@ export default function CustomerItemsPage() {
   };
 
   // ======================================================
-  // PRINT FULL CUSTOMER
+  // PRINT CUSTOMER
   // ======================================================
 
   const handlePrintGroup = (
@@ -714,10 +751,6 @@ export default function CustomerItemsPage() {
       return;
     }
 
-    // ==================================================
-    // USE SAVED OVERALL
-    // ==================================================
-
     const overall =
       getCustomerOverall(
         customerItems
@@ -732,10 +765,6 @@ export default function CustomerItemsPage() {
     const overallRemaining =
       overall.remaining;
 
-    // ==================================================
-    // DATE
-    // ==================================================
-
     const date =
       new Date().toLocaleDateString(
         "en-GB",
@@ -747,372 +776,355 @@ export default function CustomerItemsPage() {
         }
       );
 
-    // ==================================================
-    // ITEMS HTML
-    // ==================================================
-
     const itemsHTML =
       customerItems
         .map(
           (record) => `
-      <div class="item-box">
+        <div class="item-box">
 
-        <div class="item-title">
-          ${record.item}
+          <div class="item-title">
+            ${record.item}
+          </div>
+
+          <div class="item-row">
+            <span class="label">
+              QTY/KG
+            </span>
+
+            <span class="value">
+              ${Number(
+                record.quantity
+              ).toLocaleString()}
+            </span>
+          </div>
+
+          <div class="item-row">
+            <span class="label">
+              Price
+            </span>
+
+            <span class="value">
+              Rs. ${Number(
+                record.price
+              ).toLocaleString()}
+            </span>
+          </div>
+
+          <div class="item-row total-row">
+            <span class="label">
+              Total Amount
+            </span>
+
+            <span class="value">
+              Rs. ${Number(
+                record.totalPrice
+              ).toLocaleString()}
+            </span>
+          </div>
+
+          <div class="item-row item-paid">
+            <span class="label">
+              Paid Amount
+            </span>
+
+            <span class="value">
+              Rs. ${Number(
+                record.paidPrice
+              ).toLocaleString()}
+            </span>
+          </div>
+
+          <div class="item-row item-remaining">
+            <span class="label">
+              Remaining Amount
+            </span>
+
+            <span class="value">
+              Rs. ${Number(
+                record.remainingPrice
+              ).toLocaleString()}
+            </span>
+          </div>
+
         </div>
-
-        <div class="item-row">
-          <span class="label">
-            QTY/KG
-          </span>
-
-          <span class="value">
-            ${Number(
-              record.quantity
-            ).toLocaleString()}
-          </span>
-        </div>
-
-        <div class="item-row">
-          <span class="label">
-            Price
-          </span>
-
-          <span class="value">
-            Rs. ${Number(
-              record.price
-            ).toLocaleString()}
-          </span>
-        </div>
-
-        <div class="item-row total-row">
-          <span class="label">
-            Total Amount
-          </span>
-
-          <span class="value">
-            Rs. ${Number(
-              record.totalPrice
-            ).toLocaleString()}
-          </span>
-        </div>
-
-        <div class="item-row item-paid">
-          <span class="label">
-            Paid Amount
-          </span>
-
-          <span class="value">
-            Rs. ${Number(
-              record.paidPrice
-            ).toLocaleString()}
-          </span>
-        </div>
-
-        <div class="item-row item-remaining">
-          <span class="label">
-            Remaining Amount
-          </span>
-
-          <span class="value">
-            Rs. ${Number(
-              record.remainingPrice
-            ).toLocaleString()}
-          </span>
-        </div>
-
-      </div>
-    `
+      `
         )
         .join("");
-
-    // ==================================================
-    // PRINT HTML
-    // ==================================================
 
     printWindow.document.write(`
       <!DOCTYPE html>
 
       <html>
 
-        <head>
+      <head>
 
-          <meta charset="UTF-8" />
+        <meta charset="UTF-8" />
 
-          <title>
-            ${customerName} Receipt
-          </title>
+        <title>
+          ${customerName} Receipt
+        </title>
 
-          <style>
+        <style>
 
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
 
-            * {
-              box-sizing: border-box;
-            }
+          * {
+            box-sizing: border-box;
+          }
 
-            html,
-            body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-            }
+          html,
+          body {
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+          }
 
-            body {
-              width: 80mm;
-              padding: 4mm;
-              font-family: Arial, sans-serif;
-              font-size: 12px;
-              color: #000;
-            }
+          body {
+            width: 80mm;
+            padding: 4mm;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #000;
+          }
 
-            .shop {
-              text-align: center;
-              font-size: 18px;
-              font-weight: bold;
-              margin-bottom: 6px;
-            }
+          .shop {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 6px;
+          }
 
-            .customer {
-              text-align: center;
-              font-size: 15px;
-              font-weight: bold;
-              margin-bottom: 4px;
-            }
+          .customer {
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 4px;
+          }
 
-            .date {
-              text-align: center;
-              font-size: 10px;
-              margin-bottom: 8px;
-            }
+          .date {
+            text-align: center;
+            font-size: 10px;
+            margin-bottom: 8px;
+          }
 
-            .line {
-              border-top: 1px solid #000;
-              margin: 7px 0;
-            }
+          .line {
+            border-top: 1px solid #000;
+            margin: 7px 0;
+          }
 
-            .item-box {
-              padding: 8px 0;
-              page-break-inside: avoid;
-            }
+          .item-box {
+            padding: 8px 0;
+            page-break-inside: avoid;
+          }
 
-            .item-title {
-              text-align: center;
-              font-size: 14px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
+          .item-title {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+          }
 
-            .item-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              width: 100%;
-              padding: 2px 0;
-            }
+          .item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 2px 0;
+          }
 
-            .label {
-              font-weight: bold;
-            }
+          .label {
+            font-weight: bold;
+          }
 
-            .value {
-              text-align: right;
-              white-space: nowrap;
-            }
+          .value {
+            text-align: right;
+            white-space: nowrap;
+          }
 
-            .total-row {
-              margin-top: 2px;
-              font-weight: bold;
-            }
+          .total-row {
+            margin-top: 2px;
+            font-weight: bold;
+          }
 
-            .item-remaining {
-              margin-top: 5px;
-              padding-top: 5px;
-              border-bottom: 1px solid #000;
-              font-weight: bold;
-            }
+          .item-remaining {
+            margin-top: 5px;
+            padding-top: 5px;
+            border-bottom: 1px solid #000;
+            font-weight: bold;
+          }
 
-            .item-remaining .label,
-            .item-remaining .value {
-              font-size: 13px;
-            }
+          .summary {
+            width: 100%;
+            margin-top: 12px;
+          }
 
-            .summary {
-              width: 100%;
-              margin-top: 12px;
-            }
+          .summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 8px 0;
+            font-weight: bold;
+          }
 
-            .summary-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              width: 100%;
-              padding: 8px 0;
-              font-weight: bold;
-            }
+          .overall-total {
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+            padding: 10px 0;
+            font-size: 15px;
+          }
 
-            .overall-total {
-              border-top: 1px solid #000;
-              border-bottom: 1px solid #000;
-              padding: 10px 0;
-              font-size: 15px;
-            }
+          .overall-paid {
+            margin-top: 5px;
+            border-bottom: 1px dashed #777;
+            font-size: 14px;
+          }
 
-            .overall-total .summary-value {
-              font-size: 16px;
-            }
+          .overall-remaining {
+            margin-top: 5px;
+            border-bottom: 1px solid #000;
+            font-size: 14px;
+          }
 
-            .overall-paid {
-              margin-top: 5px;
-              border-bottom: 1px dashed #777;
-              font-size: 14px;
-            }
+          .footer {
+            border-top: 1px solid #000;
+            margin-top: 14px;
+            padding-top: 8px;
+          }
 
-            .overall-remaining {
-              margin-top: 5px;
-              border-bottom: 1px solid #000;
-              font-size: 14px;
-            }
+          .shop-sign {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+          }
 
-            .footer {
-              border-top: 1px solid #000;
-              margin-top: 14px;
-              padding-top: 8px;
-            }
+          .shop-number {
+            text-align: left;
+            font-size: 11px;
+          }
 
-            .shop-sign {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              width: 100%;
-            }
+          .signature {
+            text-align: right;
+            font-size: 11px;
+          }
 
-            .shop-number {
-              text-align: left;
-              font-size: 11px;
-            }
+          .address {
+            text-align: center;
+            font-weight: bold;
+            margin-top: 12px;
+            line-height: 1.5;
+            font-size: 11px;
+          }
 
-            .signature {
-              text-align: right;
-              font-size: 11px;
-            }
+        </style>
 
-            .address {
-              text-align: center;
-              font-weight: bold;
-              margin-top: 12px;
-              line-height: 1.5;
-              font-size: 11px;
-            }
+      </head>
 
-          </style>
+      <body>
 
-        </head>
+        <div class="shop">
+          بسم اللہ آئرن سٹور
+        </div>
 
-        <body>
+        <div class="customer">
+          Customer: ${customerName}
+        </div>
 
-          <div class="shop">
+        <div class="date">
+          ${date}
+        </div>
+
+        <div class="line"></div>
+
+        ${itemsHTML}
+
+        <div class="summary">
+
+          <div class="summary-row overall-total">
+
+            <span>
+              Over All Total Amount
+            </span>
+
+            <span>
+              Rs. ${overallTotal.toLocaleString()}
+            </span>
+
+          </div>
+
+          <div class="summary-row overall-paid">
+
+            <span>
+              OverAll Paid Amount
+            </span>
+
+            <span>
+              Rs. ${overallPaid.toLocaleString()}
+            </span>
+
+          </div>
+
+          <div class="summary-row overall-remaining">
+
+            <span>
+              Over All Remaining Amount
+            </span>
+
+            <span>
+              Rs. ${overallRemaining.toLocaleString()}
+            </span>
+
+          </div>
+
+        </div>
+
+        <div class="footer">
+
+          <div class="shop-sign">
+
+            <div class="shop-number">
+
+              <strong>
+                Shop Number
+              </strong>
+
+              <br />
+
+              0307-1038571
+
+            </div>
+
+            <div class="signature">
+
+              <strong>
+                Sign
+              </strong>
+
+              <br />
+
+              ___________
+
+            </div>
+
+          </div>
+
+          <div class="address">
+
             بسم اللہ آئرن سٹور
-          </div>
 
-          <div class="customer">
-            Customer: ${customerName}
-          </div>
+            جمالپور نزد ماہر والا
 
-          <div class="date">
-            ${date}
-          </div>
-
-          <div class="line"></div>
-
-          ${itemsHTML}
-
-          <div class="summary">
-
-            <div class="summary-row overall-total">
-
-              <span>
-                Over All Total Amount
-              </span>
-
-              <span class="summary-value">
-                Rs. ${overallTotal.toLocaleString()}
-              </span>
-
-            </div>
-
-            <div class="summary-row overall-paid">
-
-              <span>
-                OverAll Paid Amount
-              </span>
-
-              <span class="summary-value">
-                Rs. ${overallPaid.toLocaleString()}
-              </span>
-
-            </div>
-
-            <div class="summary-row overall-remaining">
-
-              <span>
-                Over All Remaining Amount
-              </span>
-
-              <span class="summary-value">
-                Rs. ${overallRemaining.toLocaleString()}
-              </span>
-
-            </div>
+            پٹرول پمپ قائم پور روڈ
 
           </div>
 
-          <div class="footer">
+        </div>
 
-            <div class="shop-sign">
-
-              <div class="shop-number">
-
-                <strong>
-                  Shop Number
-                </strong>
-
-                <br />
-
-                0307-1038571
-
-              </div>
-
-              <div class="signature">
-
-                <strong>
-                  Sign
-                </strong>
-
-                <br />
-
-                ___________
-
-              </div>
-
-            </div>
-
-            <div class="address">
-
-              بسم اللہ آئرن سٹور
-
-              جمالپور نزد ماہر والا
-
-              پٹرول پمپ قائم پور روڈ
-
-            </div>
-
-          </div>
-
-        </body>
+      </body>
 
       </html>
     `);
@@ -1130,24 +1142,24 @@ export default function CustomerItemsPage() {
   };
 
   // ======================================================
-  // OVERALL PAGE TOTALS
+  // PAGE TOTALS
   // ======================================================
 
   const grandTotal = items.reduce(
     (sum, item) =>
-      sum + Number(item.totalPrice),
+      sum + Number(item.totalPrice || 0),
     0
   );
 
   const totalPaid = items.reduce(
     (sum, item) =>
-      sum + Number(item.paidPrice),
+      sum + Number(item.paidPrice || 0),
     0
   );
 
   const totalRemaining = items.reduce(
     (sum, item) =>
-      sum + Number(item.remainingPrice),
+      sum + Number(item.remainingPrice || 0),
     0
   );
 
@@ -1160,9 +1172,7 @@ export default function CustomerItemsPage() {
 
       <div className="mx-auto max-w-7xl">
 
-        {/* ==================================================
-            HEADER
-        ================================================== */}
+        {/* HEADER */}
 
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
@@ -1196,9 +1206,7 @@ export default function CustomerItemsPage() {
 
         </div>
 
-        {/* ==================================================
-            FORM
-        ================================================== */}
+        {/* FORM */}
 
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -1210,7 +1218,7 @@ export default function CustomerItemsPage() {
 
                 <h2 className="font-semibold text-slate-900">
 
-                  {editingId
+                  {editingId !== null
                     ? "Update Customer Item"
                     : "Add Customer Item"}
 
@@ -1222,8 +1230,7 @@ export default function CustomerItemsPage() {
 
               </div>
 
-              {editingId && (
-
+              {editingId !== null && (
                 <button
                   type="button"
                   onClick={resetForm}
@@ -1231,7 +1238,6 @@ export default function CustomerItemsPage() {
                 >
                   Cancel
                 </button>
-
               )}
 
             </div>
@@ -1303,7 +1309,7 @@ export default function CustomerItemsPage() {
                     ٹی یار75*75
                   </option>
 
-                  <option value=" ٹی یار70*70">
+                  <option value="ٹی یار70*70">
                     ٹی یار70*70
                   </option>
 
@@ -1424,7 +1430,7 @@ export default function CustomerItemsPage() {
 
                 {loading
                   ? "Saving..."
-                  : editingId
+                  : editingId !== null
                   ? "Update Item"
                   : "Add Item"}
 
@@ -1436,9 +1442,7 @@ export default function CustomerItemsPage() {
 
         </div>
 
-        {/* ==================================================
-            CUSTOMER TABLE
-        ================================================== */}
+        {/* TABLE */}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -1519,25 +1523,21 @@ export default function CustomerItemsPage() {
                 {fetching ? (
 
                   <tr>
-
                     <td
                       colSpan={9}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
                       Loading records...
                     </td>
-
                   </tr>
 
                 ) : items.length === 0 ? (
 
                   <tr>
-
                     <td
                       colSpan={9}
                       className="px-5 py-12 text-center"
                     >
-
                       <p className="font-medium text-slate-700">
                         No records found
                       </p>
@@ -1545,9 +1545,7 @@ export default function CustomerItemsPage() {
                       <p className="mt-1 text-sm text-slate-400">
                         Add your first customer item above.
                       </p>
-
                     </td>
-
                   </tr>
 
                 ) : (
@@ -1559,44 +1557,6 @@ export default function CustomerItemsPage() {
                       customerName,
                       customerItems,
                     ]) => {
-
-                      // ====================================
-                      // NORMAL ITEM TOTALS
-                      // ====================================
-
-                      const customerTotal =
-                        customerItems.reduce(
-                          (sum, item) =>
-                            sum +
-                            Number(
-                              item.totalPrice
-                            ),
-                          0
-                        );
-
-                      const customerPaid =
-                        customerItems.reduce(
-                          (sum, item) =>
-                            sum +
-                            Number(
-                              item.paidPrice
-                            ),
-                          0
-                        );
-
-                      const customerRemaining =
-                        customerItems.reduce(
-                          (sum, item) =>
-                            sum +
-                            Number(
-                              item.remainingPrice
-                            ),
-                          0
-                        );
-
-                      // ====================================
-                      // SAVED / UPDATED OVERALL
-                      // ====================================
 
                       const overall =
                         getCustomerOverall(
@@ -1651,10 +1611,6 @@ export default function CustomerItemsPage() {
 
                                 <div className="flex flex-wrap items-center gap-3">
 
-                                  {/* =================================
-                                      OVERALL TOTAL
-                                  ================================= */}
-
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
                                     <p className="text-[10px] text-white">
@@ -1667,10 +1623,6 @@ export default function CustomerItemsPage() {
                                     </p>
 
                                   </div>
-
-                                  {/* =================================
-                                      OVERALL PAID
-                                  ================================= */}
 
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
@@ -1685,10 +1637,6 @@ export default function CustomerItemsPage() {
 
                                   </div>
 
-                                  {/* =================================
-                                      OVERALL REMAINING
-                                  ================================= */}
-
                                   <div className="rounded-lg bg-blue-600 px-3 py-2">
 
                                     <p className="text-[10px] text-white">
@@ -1701,10 +1649,6 @@ export default function CustomerItemsPage() {
                                     </p>
 
                                   </div>
-
-                                  {/* =================================
-                                      UPDATE OVERALL BUTTON
-                                  ================================= */}
 
                                   <button
                                     type="button"
@@ -1719,10 +1663,6 @@ export default function CustomerItemsPage() {
                                     Update Overall
                                   </button>
 
-                                  {/* =================================
-                                      PRINT FULL
-                                  ================================= */}
-
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -1733,18 +1673,11 @@ export default function CustomerItemsPage() {
                                     }
                                     className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
                                   >
-
                                     <Printer
                                       size={16}
                                     />
-
                                     Print Full
-
                                   </button>
-
-                                  {/* =================================
-                                      DELETE FULL
-                                  ================================= */}
 
                                   <button
                                     type="button"
@@ -1768,7 +1701,7 @@ export default function CustomerItemsPage() {
 
                           </tr>
 
-                          {/* CUSTOMER ITEMS */}
+                          {/* ITEMS */}
 
                           {customerItems.map(
                             (record) => (
@@ -1777,8 +1710,6 @@ export default function CustomerItemsPage() {
                                 key={record.id}
                                 className="transition hover:bg-slate-50"
                               >
-
-                                {/* DATE */}
 
                                 <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-700">
 
@@ -1797,8 +1728,6 @@ export default function CustomerItemsPage() {
 
                                 </td>
 
-                                {/* CUSTOMER */}
-
                                 <td className="px-5 py-4">
 
                                   <p className="font-semibold text-slate-900">
@@ -1809,8 +1738,6 @@ export default function CustomerItemsPage() {
 
                                 </td>
 
-                                {/* ITEM */}
-
                                 <td className="px-5 py-4">
 
                                   <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
@@ -1819,13 +1746,9 @@ export default function CustomerItemsPage() {
 
                                 </td>
 
-                                {/* QTY */}
-
                                 <td className="px-5 py-4 text-sm text-slate-700">
                                   {record.quantity}
                                 </td>
-
-                                {/* PRICE */}
 
                                 <td className="px-5 py-4 text-sm text-slate-700">
 
@@ -1836,8 +1759,6 @@ export default function CustomerItemsPage() {
 
                                 </td>
 
-                                {/* TOTAL */}
-
                                 <td className="px-5 py-4 text-sm font-semibold text-slate-900">
 
                                   Rs.{" "}
@@ -1846,8 +1767,6 @@ export default function CustomerItemsPage() {
                                   ).toLocaleString()}
 
                                 </td>
-
-                                {/* PAID */}
 
                                 <td className="px-5 py-4 text-sm font-medium text-emerald-600">
 
@@ -1858,8 +1777,6 @@ export default function CustomerItemsPage() {
 
                                 </td>
 
-                                {/* REMAINING */}
-
                                 <td className="px-5 py-4 text-sm font-semibold text-orange-600">
 
                                   Rs.{" "}
@@ -1868,8 +1785,6 @@ export default function CustomerItemsPage() {
                                   ).toLocaleString()}
 
                                 </td>
-
-                                {/* ACTION */}
 
                                 <td className="px-5 py-4">
 
@@ -1912,7 +1827,6 @@ export default function CustomerItemsPage() {
                       );
                     }
                   )
-
                 )}
 
               </tbody>
@@ -1923,13 +1837,9 @@ export default function CustomerItemsPage() {
 
         </div>
 
-        {/* ==================================================
-            OVERALL PAGE SUMMARY
-        ================================================== */}
+        {/* PAGE TOTALS */}
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-          {/* OVERALL TOTAL */}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
@@ -1944,8 +1854,6 @@ export default function CustomerItemsPage() {
 
           </div>
 
-          {/* OVERALL PAID */}
-
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
 
             <p className="text-sm text-emerald-600">
@@ -1958,8 +1866,6 @@ export default function CustomerItemsPage() {
             </p>
 
           </div>
-
-          {/* OVERALL REMAINING */}
 
           <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5 shadow-sm">
 
@@ -1979,7 +1885,7 @@ export default function CustomerItemsPage() {
       </div>
 
       {/* ====================================================
-          UPDATE OVERALL MODAL
+          OVERALL MODAL
       ==================================================== */}
 
       {showOverallModal && (
@@ -1987,8 +1893,6 @@ export default function CustomerItemsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
 
           <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-
-            {/* MODAL HEADER */}
 
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
 
@@ -2016,18 +1920,12 @@ export default function CustomerItemsPage() {
                 }
                 className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               >
-
                 <X size={20} />
-
               </button>
 
             </div>
 
-            {/* MODAL BODY */}
-
             <div className="space-y-4 p-5">
-
-              {/* TOTAL */}
 
               <div>
 
@@ -2047,12 +1945,9 @@ export default function CustomerItemsPage() {
                     handleOverallChange
                   }
                   className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                  placeholder="159000"
                 />
 
               </div>
-
-              {/* PAID */}
 
               <div>
 
@@ -2072,12 +1967,9 @@ export default function CustomerItemsPage() {
                     handleOverallChange
                   }
                   className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-bold text-emerald-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
-                  placeholder="100000"
                 />
 
               </div>
-
-              {/* REMAINING */}
 
               <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
 
@@ -2097,8 +1989,6 @@ export default function CustomerItemsPage() {
               </div>
 
             </div>
-
-            {/* MODAL FOOTER */}
 
             <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
 
@@ -2120,11 +2010,9 @@ export default function CustomerItemsPage() {
                 }
                 className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 {loading
                   ? "Updating..."
                   : "Update Price"}
-
               </button>
 
             </div>
