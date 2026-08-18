@@ -399,8 +399,7 @@ export default function Cart() {
                 </span>
               </div>
             ))}
-
-            <div className="flex justify-between font-extrabold mt-3 pt-2">
+            <div className="flex justify-between classnamej  font-extrabold mt-3 pt-1 p-4  rounded-md">
               <span>Total</span>
               <span>
                 Rs{" "}
@@ -414,9 +413,7 @@ export default function Cart() {
               </span>
             </div>
 
-            <div className="border-t border-b py-1.5">
-              <div className="note-box" />
-            </div>
+           
 
             <div className="print-footer">
               <div className="flex mt-2 justify-between">

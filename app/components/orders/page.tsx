@@ -24,11 +24,7 @@ import {
 
 interface Item {
   id?: number;
-
-  // Important:
-  // Original order from which this item came.
   orderId?: number;
-
   name: string;
   price: number;
   quantity: number;
@@ -48,21 +44,18 @@ interface Order {
 
 interface GroupedOrder {
   id: number;
-
   customerName: string;
-
   items: Item[];
-
   total: number;
-
   itemsCalculatedTotal: number;
-
   createdAt: string;
-
   updatedAt?: string;
-
-  // All database orders belonging to this customer group
   orderIds: number[];
+
+  // ==========================================================
+  // EVERY ITEM NAME => TOTAL QUANTITY
+  // ==========================================================
+  itemQuantityCount: Record<string, number>;
 }
 
 // ============================================================
@@ -70,10 +63,6 @@ interface GroupedOrder {
 // ============================================================
 
 export default function OrdersPage() {
-  // ==========================================================
-  // STATES
-  // ==========================================================
-
   const [orders, setOrders] =
     useState<Order[]>([]);
 
@@ -209,15 +198,10 @@ export default function OrdersPage() {
 
                       return {
                         ...item,
-
-                        // IMPORTANT
                         orderId:
                           order.id,
-
                         price,
-
                         quantity,
-
                         total:
                           item.total !==
                             undefined &&
@@ -247,13 +231,10 @@ export default function OrdersPage() {
               );
 
             /*
-             * IMPORTANT:
-             *
-             * If saved editable total exists,
-             * preserve it.
-             *
-             * Do NOT overwrite it from items.
+             * Existing saved editable total
+             * must be preserved.
              */
+
             const savedCalculatedTotal =
               order.itemsCalculatedTotal !==
                 null &&
@@ -332,6 +313,78 @@ export default function OrdersPage() {
       },
       0
     );
+  };
+
+  // ==========================================================
+  // ⭐ ITEM-WISE QUANTITY COUNT
+  //
+  // Example:
+  //
+  // Cement 10
+  // Cement 20
+  // Cement 5
+  //
+  // Result:
+  // Cement = 35
+  //
+  // Every item name is automatically counted.
+  // No hard-coded Cement/Sarya/Bajri.
+  // ==========================================================
+
+  const calculateItemQuantityCount = (
+    items: Item[]
+  ): Record<string, number> => {
+    const counts: Record<
+      string,
+      number
+    > = {};
+
+    items.forEach((item) => {
+      const originalName =
+        String(
+          item.name || ""
+        ).trim();
+
+      if (!originalName) {
+        return;
+      }
+
+      const quantity =
+        Number(item.quantity) || 0;
+
+      /*
+       * We use lower-case only for matching,
+       * but keep the original display name.
+       */
+
+      const existingKey =
+        Object.keys(
+          counts
+        ).find(
+          (key) =>
+            key
+              .trim()
+              .toLowerCase() ===
+            originalName
+              .toLowerCase()
+        );
+
+      const finalKey =
+        existingKey ||
+        originalName;
+
+      if (
+        counts[finalKey] ===
+        undefined
+      ) {
+        counts[finalKey] = 0;
+      }
+
+      counts[finalKey] +=
+        quantity;
+    });
+
+    return counts;
   };
 
   // ==========================================================
@@ -496,14 +549,6 @@ export default function OrdersPage() {
                 )
               : [];
 
-          /*
-           * IMPORTANT:
-           *
-           * We use saved editable total.
-           *
-           * We do NOT replace it with
-           * calculateItemsTotal().
-           */
           const calculatedFromItems =
             calculateItemsTotal(
               items
@@ -518,6 +563,15 @@ export default function OrdersPage() {
                   order.itemsCalculatedTotal
                 )
               : calculatedFromItems;
+
+          // ==================================================
+          // ⭐ THIS ORDER'S ITEM COUNTS
+          // ==================================================
+
+          const itemQuantityCount =
+            calculateItemQuantityCount(
+              items
+            );
 
           const existing =
             map.get(key);
@@ -556,13 +610,19 @@ export default function OrdersPage() {
               orderIds: [
                 order.id,
               ],
+
+              // ⭐ ITEM-WISE COUNT
+              itemQuantityCount:
+                {
+                  ...itemQuantityCount,
+                },
             });
 
             return;
           }
 
           // ==================================================
-          // MERGE SECOND / THIRD / ETC ORDER
+          // MERGE ITEMS
           // ==================================================
 
           existing.items = [
@@ -570,22 +630,19 @@ export default function OrdersPage() {
             ...items,
           ];
 
-          /*
-           * Customer Total:
-           *
-           * Every database order's customer total
-           * is added exactly once.
-           */
+          // ==================================================
+          // MERGE CUSTOMER TOTAL
+          // ==================================================
+
           existing.total +=
             Number(
               order.total
             ) || 0;
 
-          /*
-           * Editable Items Calculated Total:
-           *
-           * Every order's saved value is added once.
-           */
+          // ==================================================
+          // MERGE CALCULATED TOTAL
+          // ==================================================
+
           existing.itemsCalculatedTotal +=
             Number.isFinite(
               savedCalculatedTotal
@@ -593,18 +650,65 @@ export default function OrdersPage() {
               ? savedCalculatedTotal
               : calculatedFromItems;
 
-          /*
-           * IMPORTANT:
-           *
-           * Keep ALL database order IDs.
-           *
-           * PUT will merge them into one order.
-           */
+          // ==================================================
+          // MERGE ORDER IDS
+          // ==================================================
+
           existing.orderIds.push(
             order.id
           );
 
-          // Latest date
+          // ==================================================
+          // ⭐ MERGE EVERY ITEM QUANTITY
+          // ==================================================
+
+          Object.entries(
+            itemQuantityCount
+          ).forEach(
+            ([
+              itemName,
+              quantity,
+            ]) => {
+              const existingKey =
+                Object.keys(
+                  existing.itemQuantityCount
+                ).find(
+                  (key) =>
+                    key
+                      .trim()
+                      .toLowerCase() ===
+                    itemName
+                      .trim()
+                      .toLowerCase()
+                );
+
+              const finalKey =
+                existingKey ||
+                itemName;
+
+              if (
+                existing
+                  .itemQuantityCount[
+                  finalKey
+                ] === undefined
+              ) {
+                existing
+                  .itemQuantityCount[
+                  finalKey
+                ] = 0;
+              }
+
+              existing
+                .itemQuantityCount[
+                finalKey
+              ] += quantity;
+            }
+          );
+
+          // ==================================================
+          // LATEST DATE
+          // ==================================================
+
           if (
             new Date(
               order.createdAt
@@ -670,7 +774,7 @@ export default function OrdersPage() {
     ]);
 
   // ==========================================================
-  // COUNTING ITEMS
+  // ALL UNIQUE ITEMS FOR COUNTING
   // ==========================================================
 
   const countingItems =
@@ -812,19 +916,16 @@ export default function OrdersPage() {
           );
       }
 
-      const startString =
-        getDateOnly(
-          start.toISOString()
-        );
-
-      const endString =
-        getDateOnly(
-          end.toISOString()
-        );
-
       return {
-        start: startString,
-        end: endString,
+        start:
+          getDateOnly(
+            start.toISOString()
+          ),
+
+        end:
+          getDateOnly(
+            end.toISOString()
+          ),
       };
     }, [
       countingDate,
@@ -832,7 +933,7 @@ export default function OrdersPage() {
     ]);
 
   // ==========================================================
-  // ITEM COUNTING
+  // SELECTED ITEM COUNTING
   // ==========================================================
 
   const itemCountingResult =
@@ -850,6 +951,7 @@ export default function OrdersPage() {
       let filtered =
         orders;
 
+      // DATE FILTER
       if (
         fromDate ||
         toDate
@@ -881,6 +983,7 @@ export default function OrdersPage() {
           );
       }
 
+      // PERIOD FILTER
       if (
         getCountingDateRange
       ) {
@@ -979,7 +1082,6 @@ export default function OrdersPage() {
     }, [
       orders,
       selectedCountingItem,
-      countingDate,
       getCountingDateRange,
       fromDate,
       toDate,
@@ -1098,18 +1200,6 @@ export default function OrdersPage() {
 
   // ==========================================================
   // REMOVE ITEM
-  //
-  // VERY IMPORTANT:
-  //
-  // Only subtract deleted item's exact total
-  // from CURRENT editable Items Calculated Total.
-  //
-  // Example:
-  //
-  // Current = 61,000
-  // Deleted item = 5,000
-  //
-  // New = 56,000
   // ==========================================================
 
   const handleRemoveItem = (
@@ -1124,26 +1214,20 @@ export default function OrdersPage() {
           return previous;
         }
 
-        const price =
+        const oldPrice =
           Number(
             itemToDelete.price
           ) || 0;
 
-        const quantity =
+        const oldQuantity =
           Number(
             itemToDelete.quantity
           ) || 0;
 
         const deletedItemTotal =
-          price * quantity;
+          oldPrice *
+          oldQuantity;
 
-        /*
-         * IMPORTANT:
-         *
-         * This is the CURRENT user-edited value.
-         *
-         * Never recalculate it from all items here.
-         */
         const currentCalculatedTotal =
           Number(
             previous.itemsCalculatedTotal
@@ -1174,9 +1258,6 @@ export default function OrdersPage() {
 
   // ==========================================================
   // UPDATE ITEM
-  //
-  // OLD TOTAL REMOVE
-  // NEW TOTAL ADD
   // ==========================================================
 
   const handleItemChange = (
@@ -1199,10 +1280,6 @@ export default function OrdersPage() {
           return previous;
         }
 
-        // ====================================================
-        // OLD TOTAL
-        // ====================================================
-
         const oldPrice =
           Number(
             oldItem.price
@@ -1216,10 +1293,6 @@ export default function OrdersPage() {
         const oldTotal =
           oldPrice *
           oldQuantity;
-
-        // ====================================================
-        // CHANGE ITEM
-        // ====================================================
 
         const currentItem = {
           ...oldItem,
@@ -1250,10 +1323,6 @@ export default function OrdersPage() {
               : Number(value);
         }
 
-        // ====================================================
-        // NEW TOTAL
-        // ====================================================
-
         const newPrice =
           Number(
             currentItem.price
@@ -1274,18 +1343,10 @@ export default function OrdersPage() {
         updatedItems[index] =
           currentItem;
 
-        // ====================================================
-        // CURRENT EDITABLE TOTAL
-        // ====================================================
-
         const currentCalculatedTotal =
           Number(
             previous.itemsCalculatedTotal
           ) || 0;
-
-        // ====================================================
-        // OLD REMOVE + NEW ADD
-        // ====================================================
 
         const updatedCalculatedTotal =
           currentCalculatedTotal -
@@ -1328,16 +1389,6 @@ export default function OrdersPage() {
       customerName:
         group.customerName,
 
-      /*
-       * ALL GROUP ITEMS
-       *
-       * Example:
-       *
-       * Order 6 = 6 items
-       * Order 7 = 5 items
-       *
-       * form = 11 items
-       */
       items:
         group.items.map(
           (item) => ({
@@ -1373,21 +1424,11 @@ export default function OrdersPage() {
           })
         ),
 
-      /*
-       * Customer Total
-       */
       total:
         Number(
           group.total
         ) || 0,
 
-      /*
-       * VERY IMPORTANT:
-       *
-       * Use grouped saved editable total.
-       *
-       * Do not replace it with items calculation.
-       */
       itemsCalculatedTotal:
         group.itemsCalculatedTotal !==
           null &&
@@ -1405,7 +1446,7 @@ export default function OrdersPage() {
   };
 
   // ==========================================================
-  // UPDATE / MERGE ORDER
+  // UPDATE / MERGE
   // ==========================================================
 
   const handleUpdateOrder =
@@ -1423,10 +1464,6 @@ export default function OrdersPage() {
         Number(
           formData.itemsCalculatedTotal
         );
-
-      // ======================================================
-      // VALIDATION
-      // ======================================================
 
       if (
         !formData.customerName.trim()
@@ -1465,26 +1502,9 @@ export default function OrdersPage() {
       try {
         setSaving(true);
 
-        /*
-         * Primary order will survive.
-         *
-         * Example:
-         *
-         * group.orderIds = [6, 7]
-         *
-         * orderId = 6
-         *
-         * Result:
-         *
-         * Order 6 = merged 11 items
-         * Order 7 = deleted
-         */
         const primaryOrderId =
           editingOrder.id;
 
-        /*
-         * ALL database orders in this group.
-         */
         const groupOrderIds =
           editingOrder.orderIds;
 
@@ -1500,24 +1520,15 @@ export default function OrdersPage() {
               },
 
               body: JSON.stringify({
-                /*
-                 * Primary order
-                 */
                 orderId:
                   primaryOrderId,
 
-                /*
-                 * ALL orders that must be merged
-                 */
                 orderIds:
                   groupOrderIds,
 
                 customerName:
                   formData.customerName.trim(),
 
-                /*
-                 * ALL merged items
-                 */
                 items:
                   formData.items.map(
                     (item) => ({
@@ -1536,17 +1547,9 @@ export default function OrdersPage() {
                     })
                   ),
 
-                /*
-                 * Customer Total
-                 */
                 total:
                   customerTotal,
 
-                /*
-                 * USER EDITABLE TOTAL
-                 *
-                 * Send CURRENT value.
-                 */
                 itemsCalculatedTotal:
                   itemsCalculatedTotal,
               }),
@@ -1574,13 +1577,6 @@ export default function OrdersPage() {
           null
         );
 
-        /*
-         * Reload from DB.
-         *
-         * This is important because
-         * old grouped orders have been deleted
-         * by backend.
-         */
         await fetchOrders();
 
         alert(
@@ -1602,7 +1598,7 @@ export default function OrdersPage() {
     };
 
   // ==========================================================
-  // DELETE COMPLETE CUSTOMER GROUP
+  // DELETE GROUP
   // ==========================================================
 
   const handleDeleteGroup =
@@ -1621,9 +1617,6 @@ export default function OrdersPage() {
       try {
         setLoading(true);
 
-        /*
-         * Delete every order in this group.
-         */
         for (
           const orderId of
             group.orderIds
@@ -1756,9 +1749,6 @@ export default function OrdersPage() {
         })
         .join("");
 
-    /*
-     * Print USER EDITABLE total.
-     */
     const itemsCalculatedTotal =
       Number(
         group.itemsCalculatedTotal
@@ -1993,7 +1983,7 @@ export default function OrdersPage() {
   };
 
   // ==========================================================
-  // COUNTS
+  // STATS
   // ==========================================================
 
   const totalCustomers =
@@ -2169,7 +2159,7 @@ export default function OrdersPage() {
               </h2>
 
               <p className="text-sm text-gray-500 mt-1">
-                Count quantity and total amount of a selected item
+                Count quantity and total amount of any item
               </p>
 
             </div>
@@ -2231,14 +2221,14 @@ export default function OrdersPage() {
                 value={
                   countingPeriod
                 }
-                onChange={(e) => {
+                onChange={(e) =>
                   setCountingPeriod(
                     e.target.value as
                       | "daily"
                       | "weekly"
                       | "monthly"
-                  );
-                }}
+                  )
+                }
                 className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
 
@@ -2351,23 +2341,19 @@ export default function OrdersPage() {
           {countingDate &&
             getCountingDateRange && (
               <div className="mt-4 bg-gray-50 border rounded-xl p-3 text-sm text-gray-600">
-
                 Counting period:
-
-                <strong className="ml-1">
+                {" "}
+                <strong>
                   {
                     getCountingDateRange.start
                   }
                 </strong>
-
                 {" "}to{" "}
-
                 <strong>
                   {
                     getCountingDateRange.end
                   }
                 </strong>
-
               </div>
             )}
 
@@ -2386,9 +2372,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {
-                totalCustomers
-              }
+              {totalCustomers}
             </div>
 
           </div>
@@ -2400,9 +2384,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {
-                totalOrders
-              }
+              {totalOrders}
             </div>
 
           </div>
@@ -2414,9 +2396,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {
-                totalItems
-              }
+              {totalItems}
             </div>
 
           </div>
@@ -2453,7 +2433,7 @@ export default function OrdersPage() {
         </div>
 
         {/* ====================================================
-            ORDERS
+            CUSTOMER GROUPS
         ==================================================== */}
 
         <div className="space-y-4">
@@ -2472,17 +2452,26 @@ export default function OrdersPage() {
                   group.customerName
                 ];
 
+              const itemCounters =
+                Object.entries(
+                  group.itemQuantityCount
+                );
+
               return (
                 <div
                   key={`${group.customerName}-${group.id}`}
                   className="bg-white border rounded-2xl shadow-sm overflow-hidden"
                 >
 
-                  {/* GROUP HEADER */}
+                  {/* ==================================================
+                      GROUP HEADER
+                  ================================================== */}
 
                   <div className="p-5">
 
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
+                      {/* CUSTOMER */}
 
                       <div className="flex items-center gap-3">
 
@@ -2529,30 +2518,103 @@ export default function OrdersPage() {
 
                       </div>
 
-                      {/* ITEMS CALCULATED TOTAL */}
+                    </div>
 
-                      <div className="flex justify-end">
+                    {/* ==================================================
+                        ⭐ EVERY ITEM QUANTITY COUNTER
+                    ================================================== */}
 
-                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                    {itemCounters.length >
+                      0 && (
+                      <div className="">
 
-                          <div className="text-xs text-blue-600 font-medium">
-                            Items Calculated Total
+                        <div className="flex items-center justify-between ">
+
+                          <div>
+
+                        
+
                           </div>
 
-                          <div className="font-bold text-blue-900 mt-1">
-                            Rs{" "}
-                            {Number(
-                              group.itemsCalculatedTotal
-                            ).toLocaleString()}
+                          <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">
+                            {
+                              itemCounters.length
+                            }{" "}
+                            different items
                           </div>
 
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+
+                          {itemCounters.map(
+                            ([
+                              itemName,
+                              quantity,
+                            ]) => (
+                              <div
+                                key={
+                                  itemName
+                                }
+                                className="bg-gray-50 border border-gray-200 rounded-xl p-1 hover:border-blue-300 hover:bg-blue-50 transition"
+                              >
+
+                                <div
+                                  className="text-xs font-semibold text-gray-500 truncate"
+                                  title={
+                                    itemName
+                                  }
+                                >
+                                  {
+                                    itemName
+                                  }
+                                </div>
+
+                                <div className="text-2xl font-bold text-gray-900 mt-1">
+                                  {Number(
+                                    quantity
+                                  ).toLocaleString()}
+                                </div>
+
+                                <div className="text-[11px] text-gray-500">
+                                  Quantity
+                                </div>
+
+                              </div>
+                            )
+                          )}
+
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* ==================================================
+                        ITEMS CALCULATED TOTAL
+                    ================================================== */}
+
+                    <div className="flex justify-end mt-4">
+
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-1">
+
+                        <div className="text-xs text-blue-600 font-medium">
+                          overall Total
+                        </div>
+
+                        <div className="font-bold text-blue-900 mt-1">
+                          Rs{" "}
+                          {Number(
+                            group.itemsCalculatedTotal
+                          ).toLocaleString()}
                         </div>
 
                       </div>
 
                     </div>
 
-                    {/* ACTION BUTTONS */}
+                    {/* ==================================================
+                        BUTTONS
+                    ================================================== */}
 
                     <div className="flex flex-wrap gap-2 mt-5">
 
@@ -2636,7 +2698,9 @@ export default function OrdersPage() {
 
                   </div>
 
-                  {/* ITEMS */}
+                  {/* ==================================================
+                      ITEMS TABLE
+                  ================================================== */}
 
                   {isExpanded && (
                     <div className="border-t bg-gray-50 p-5">
@@ -2811,7 +2875,9 @@ export default function OrdersPage() {
                   }}
                   className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
                 >
+
                   <X size={20} />
+
                 </button>
 
               </div>
@@ -2848,9 +2914,7 @@ export default function OrdersPage() {
 
                 </div>
 
-                {/* =================================================
-                    ITEMS
-                ================================================= */}
+                {/* ITEMS */}
 
                 <div className="border rounded-2xl overflow-hidden mb-5">
 
@@ -2995,7 +3059,7 @@ export default function OrdersPage() {
 
                           </div>
 
-                          {/* ITEM TOTAL */}
+                          {/* TOTAL */}
 
                           <div className="md:col-span-2">
 
@@ -3051,7 +3115,7 @@ export default function OrdersPage() {
                 </div>
 
                 {/* =================================================
-                    ITEMS CALCULATED TOTAL
+                    EDITABLE ITEMS CALCULATED TOTAL
                 ================================================= */}
 
                 <div className="flex justify-end">
@@ -3095,12 +3159,6 @@ export default function OrdersPage() {
                             ) => ({
                               ...previous,
 
-                              /*
-                               * IMPORTANT:
-                               *
-                               * This is the new manual
-                               * source value.
-                               */
                               itemsCalculatedTotal:
                                 Number.isFinite(
                                   value
@@ -3119,17 +3177,9 @@ export default function OrdersPage() {
 
                 </div>
 
-                {/* =================================================
-                    LOGIC NOTE
-                ================================================= */}
-
-                
-
               </div>
 
-              {/* =================================================
-                  MODAL FOOTER
-              ================================================= */}
+              {/* MODAL FOOTER */}
 
               <div className="sticky bottom-0 bg-white border-t px-5 py-4 flex flex-col sm:flex-row justify-end gap-3">
 

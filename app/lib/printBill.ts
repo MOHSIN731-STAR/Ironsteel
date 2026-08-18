@@ -83,13 +83,7 @@ line-height:1.35;
   .border { border: 1px solid #000; }
   .rounded-lg { border-radius: 0.5rem; }
 
-  .note-box {
-    width: 100%;
-    height: 3rem;
-    margin-top: 0.5rem;
-    border: 1px solid #000;
-    border-radius: 0.5rem;
-  }
+
 
   .print-footer {
     page-break-inside: avoid;
