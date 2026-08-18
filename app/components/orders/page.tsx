@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   Pencil,
   Trash2,
@@ -19,6 +24,11 @@ import {
 
 interface Item {
   id?: number;
+
+  // Important:
+  // Original order from which this item came.
+  orderId?: number;
+
   name: string;
   price: number;
   quantity: number;
@@ -38,12 +48,20 @@ interface Order {
 
 interface GroupedOrder {
   id: number;
+
   customerName: string;
+
   items: Item[];
+
   total: number;
+
   itemsCalculatedTotal: number;
+
   createdAt: string;
+
   updatedAt?: string;
+
+  // All database orders belonging to this customer group
   orderIds: number[];
 }
 
@@ -56,53 +74,80 @@ export default function OrdersPage() {
   // STATES
   // ==========================================================
 
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState("");
+  const [orders, setOrders] =
+    useState<Order[]>([]);
 
-  const [expandedGroups, setExpandedGroups] =
-    useState<Record<string, boolean>>({});
+  const [loading, setLoading] =
+    useState(false);
 
-  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] =
+    useState(false);
 
-  const [editingOrder, setEditingOrder] =
-    useState<GroupedOrder | null>(null);
-
-  // ==========================================================
-  // DATE FILTER STATES
-  // ==========================================================
-
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-
-  // ==========================================================
-  // ITEM COUNTING STATES
-  // ==========================================================
-
-  const [selectedCountingItem, setSelectedCountingItem] =
+  const [search, setSearch] =
     useState("");
 
-  const [countingPeriod, setCountingPeriod] =
-    useState<"daily" | "weekly" | "monthly">("daily");
+  const [
+    expandedGroups,
+    setExpandedGroups,
+  ] = useState<Record<string, boolean>>(
+    {}
+  );
 
-  const [countingDate, setCountingDate] = useState("");
+  const [showModal, setShowModal] =
+    useState(false);
+
+  const [
+    editingOrder,
+    setEditingOrder,
+  ] = useState<GroupedOrder | null>(
+    null
+  );
+
+  // ==========================================================
+  // DATE FILTER
+  // ==========================================================
+
+  const [fromDate, setFromDate] =
+    useState("");
+
+  const [toDate, setToDate] =
+    useState("");
+
+  // ==========================================================
+  // ITEM COUNTING
+  // ==========================================================
+
+  const [
+    selectedCountingItem,
+    setSelectedCountingItem,
+  ] = useState("");
+
+  const [
+    countingPeriod,
+    setCountingPeriod,
+  ] = useState<
+    "daily" | "weekly" | "monthly"
+  >("daily");
+
+  const [countingDate, setCountingDate] =
+    useState("");
 
   // ==========================================================
   // FORM
   // ==========================================================
 
-  const [formData, setFormData] = useState<{
-    customerName: string;
-    items: Item[];
-    total: number;
-    itemsCalculatedTotal: number;
-  }>({
-    customerName: "",
-    items: [],
-    total: 0,
-    itemsCalculatedTotal: 0,
-  });
+  const [formData, setFormData] =
+    useState<{
+      customerName: string;
+      items: Item[];
+      total: number;
+      itemsCalculatedTotal: number;
+    }>({
+      customerName: "",
+      items: [],
+      total: 0,
+      itemsCalculatedTotal: 0,
+    });
 
   // ==========================================================
   // FETCH ORDERS
@@ -112,15 +157,23 @@ export default function OrdersPage() {
     try {
       setLoading(true);
 
-      const response = await fetch("/api/orders", {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        "/api/orders",
+        {
+          cache: "no-store",
+        }
+      );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      if (!response.ok || !data.success) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         throw new Error(
-          data.message || "Failed to fetch orders"
+          data.message ||
+            "Failed to fetch orders"
         );
       }
 
@@ -131,52 +184,118 @@ export default function OrdersPage() {
           ? data.data
           : [];
 
-      const normalizedOrders = fetchedOrders.map((order) => {
-        const items = Array.isArray(order.items)
-          ? order.items.map((item) => {
-              const price = Number(item.price) || 0;
-              const quantity = Number(item.quantity) || 0;
+      // ======================================================
+      // NORMALIZE ORDERS
+      // ======================================================
 
-              return {
-                ...item,
-                price,
-                quantity,
-                total:
-                  item.total !== undefined &&
-                  item.total !== null
-                    ? Number(item.total)
-                    : price * quantity,
-              };
-            })
-          : [];
+      const normalizedOrders =
+        fetchedOrders.map(
+          (order) => {
+            const items =
+              Array.isArray(
+                order.items
+              )
+                ? order.items.map(
+                    (item) => {
+                      const price =
+                        Number(
+                          item.price
+                        ) || 0;
 
-        const calculatedFromItems = items.reduce(
-          (sum, item) =>
-            sum +
-            Number(item.total || 0),
-          0
+                      const quantity =
+                        Number(
+                          item.quantity
+                        ) || 0;
+
+                      return {
+                        ...item,
+
+                        // IMPORTANT
+                        orderId:
+                          order.id,
+
+                        price,
+
+                        quantity,
+
+                        total:
+                          item.total !==
+                            undefined &&
+                          item.total !==
+                            null
+                            ? Number(
+                                item.total
+                              )
+                            : price *
+                              quantity,
+                      };
+                    }
+                  )
+                : [];
+
+            const calculatedFromItems =
+              items.reduce(
+                (
+                  sum,
+                  item
+                ) =>
+                  sum +
+                  Number(
+                    item.total || 0
+                  ),
+                0
+              );
+
+            /*
+             * IMPORTANT:
+             *
+             * If saved editable total exists,
+             * preserve it.
+             *
+             * Do NOT overwrite it from items.
+             */
+            const savedCalculatedTotal =
+              order.itemsCalculatedTotal !==
+                null &&
+              order.itemsCalculatedTotal !==
+                undefined
+                ? Number(
+                    order.itemsCalculatedTotal
+                  )
+                : calculatedFromItems;
+
+            return {
+              ...order,
+
+              total:
+                Number(
+                  order.total
+                ) || 0,
+
+              items,
+
+              itemsCalculatedTotal:
+                Number.isFinite(
+                  savedCalculatedTotal
+                )
+                  ? savedCalculatedTotal
+                  : calculatedFromItems,
+            };
+          }
         );
 
-        const savedCalculatedTotal =
-          order.itemsCalculatedTotal !== null &&
-          order.itemsCalculatedTotal !== undefined
-            ? Number(order.itemsCalculatedTotal)
-            : calculatedFromItems;
-
-        return {
-          ...order,
-          total: Number(order.total) || 0,
-          items,
-          itemsCalculatedTotal: savedCalculatedTotal,
-        };
-      });
-
-      setOrders(normalizedOrders);
+      setOrders(
+        normalizedOrders
+      );
     } catch (error: any) {
-      console.error("Fetch orders error:", error);
+      console.error(
+        "Fetch orders error:",
+        error
+      );
 
       alert(
-        error?.message || "Failed to fetch orders"
+        error?.message ||
+          "Failed to fetch orders"
       );
     } finally {
       setLoading(false);
@@ -195,50 +314,83 @@ export default function OrdersPage() {
   // CALCULATE ITEMS TOTAL
   // ==========================================================
 
-  const calculateItemsTotal = (items: Item[]) => {
-    return items.reduce((sum, item) => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 0;
+  const calculateItemsTotal = (
+    items: Item[]
+  ) => {
+    return items.reduce(
+      (sum, item) => {
+        const price =
+          Number(item.price) || 0;
 
-      return sum + price * quantity;
-    }, 0);
+        const quantity =
+          Number(item.quantity) || 0;
+
+        return (
+          sum +
+          price * quantity
+        );
+      },
+      0
+    );
   };
 
   // ==========================================================
   // FORMAT DATE
   // ==========================================================
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "-";
-
-    const date = new Date(dateString);
-
-    if (Number.isNaN(date.getTime())) {
+  const formatDate = (
+    dateString: string
+  ) => {
+    if (!dateString) {
       return "-";
     }
 
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+    const date =
+      new Date(dateString);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "-";
+    }
+
+    return date.toLocaleDateString(
+      "en-GB",
+      {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }
+    );
   };
 
   // ==========================================================
-  // DATE ONLY HELPER
+  // DATE ONLY
   // ==========================================================
 
-  const getDateOnly = (dateString: string) => {
-    const date = new Date(dateString);
+  const getDateOnly = (
+    dateString: string
+  ) => {
+    const date =
+      new Date(dateString);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "";
     }
 
-    const year = date.getFullYear();
+    const year =
+      date.getFullYear();
+
     const month = String(
       date.getMonth() + 1
     ).padStart(2, "0");
+
     const day = String(
       date.getDate()
     ).padStart(2, "0");
@@ -247,385 +399,660 @@ export default function OrdersPage() {
   };
 
   // ==========================================================
-  // DATE RANGE FILTER
+  // DATE FILTER
   // ==========================================================
 
-  const dateFilteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const orderDate = getDateOnly(order.createdAt);
+  const dateFilteredOrders =
+    useMemo(() => {
+      return orders.filter(
+        (order) => {
+          const orderDate =
+            getDateOnly(
+              order.createdAt
+            );
 
-      if (!orderDate) {
-        return false;
-      }
+          if (!orderDate) {
+            return false;
+          }
 
-      if (fromDate && orderDate < fromDate) {
-        return false;
-      }
+          if (
+            fromDate &&
+            orderDate < fromDate
+          ) {
+            return false;
+          }
 
-      if (toDate && orderDate > toDate) {
-        return false;
-      }
+          if (
+            toDate &&
+            orderDate > toDate
+          ) {
+            return false;
+          }
 
-      return true;
-    });
-  }, [orders, fromDate, toDate]);
+          return true;
+        }
+      );
+    }, [
+      orders,
+      fromDate,
+      toDate,
+    ]);
 
   // ==========================================================
   // GROUP ORDERS BY CUSTOMER
   // ==========================================================
 
-  const groupedOrders = useMemo(() => {
-    const map = new Map<string, GroupedOrder>();
+  const groupedOrders =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          GroupedOrder
+        >();
 
-    dateFilteredOrders.forEach((order) => {
-      const key = order.customerName
-        .trim()
-        .toLowerCase();
+      dateFilteredOrders.forEach(
+        (order) => {
+          const key =
+            order.customerName
+              .trim()
+              .toLowerCase();
 
-      const items = Array.isArray(order.items)
-        ? order.items
-        : [];
+          const items =
+            Array.isArray(
+              order.items
+            )
+              ? order.items.map(
+                  (item) => ({
+                    ...item,
 
-      const calculatedFromItems =
-        calculateItemsTotal(items);
+                    orderId:
+                      order.id,
 
-      const savedCalculatedTotal =
-        order.itemsCalculatedTotal !== null &&
-        order.itemsCalculatedTotal !== undefined
-          ? Number(order.itemsCalculatedTotal)
-          : calculatedFromItems;
+                    price:
+                      Number(
+                        item.price
+                      ) || 0,
 
-      const existing = map.get(key);
+                    quantity:
+                      Number(
+                        item.quantity
+                      ) || 0,
 
-      if (!existing) {
-        map.set(key, {
-          id: order.id,
-          customerName: order.customerName,
-          items: [...items],
-          total: Number(order.total) || 0,
-          itemsCalculatedTotal:
-            savedCalculatedTotal,
-          createdAt: order.createdAt,
-          updatedAt: order.updatedAt,
-          orderIds: [order.id],
-        });
-      } else {
-        existing.items = [
-          ...existing.items,
-          ...items,
-        ];
+                    total:
+                      Number(
+                        item.total ??
+                          (
+                            Number(
+                              item.price
+                            ) || 0
+                          ) *
+                          (
+                            Number(
+                              item.quantity
+                            ) || 0
+                          )
+                      ),
+                  })
+                )
+              : [];
 
-        existing.total +=
-          Number(order.total) || 0;
+          /*
+           * IMPORTANT:
+           *
+           * We use saved editable total.
+           *
+           * We do NOT replace it with
+           * calculateItemsTotal().
+           */
+          const calculatedFromItems =
+            calculateItemsTotal(
+              items
+            );
 
-        existing.itemsCalculatedTotal +=
-          savedCalculatedTotal;
+          const savedCalculatedTotal =
+            order.itemsCalculatedTotal !==
+              null &&
+            order.itemsCalculatedTotal !==
+              undefined
+              ? Number(
+                  order.itemsCalculatedTotal
+                )
+              : calculatedFromItems;
 
-        existing.orderIds.push(order.id);
+          const existing =
+            map.get(key);
 
-        if (
-          new Date(order.createdAt) >
-          new Date(existing.createdAt)
-        ) {
-          existing.createdAt =
-            order.createdAt;
+          // ==================================================
+          // FIRST ORDER
+          // ==================================================
+
+          if (!existing) {
+            map.set(key, {
+              id: order.id,
+
+              customerName:
+                order.customerName,
+
+              items: [...items],
+
+              total:
+                Number(
+                  order.total
+                ) || 0,
+
+              itemsCalculatedTotal:
+                Number.isFinite(
+                  savedCalculatedTotal
+                )
+                  ? savedCalculatedTotal
+                  : calculatedFromItems,
+
+              createdAt:
+                order.createdAt,
+
+              updatedAt:
+                order.updatedAt,
+
+              orderIds: [
+                order.id,
+              ],
+            });
+
+            return;
+          }
+
+          // ==================================================
+          // MERGE SECOND / THIRD / ETC ORDER
+          // ==================================================
+
+          existing.items = [
+            ...existing.items,
+            ...items,
+          ];
+
+          /*
+           * Customer Total:
+           *
+           * Every database order's customer total
+           * is added exactly once.
+           */
+          existing.total +=
+            Number(
+              order.total
+            ) || 0;
+
+          /*
+           * Editable Items Calculated Total:
+           *
+           * Every order's saved value is added once.
+           */
+          existing.itemsCalculatedTotal +=
+            Number.isFinite(
+              savedCalculatedTotal
+            )
+              ? savedCalculatedTotal
+              : calculatedFromItems;
+
+          /*
+           * IMPORTANT:
+           *
+           * Keep ALL database order IDs.
+           *
+           * PUT will merge them into one order.
+           */
+          existing.orderIds.push(
+            order.id
+          );
+
+          // Latest date
+          if (
+            new Date(
+              order.createdAt
+            ) >
+            new Date(
+              existing.createdAt
+            )
+          ) {
+            existing.createdAt =
+              order.createdAt;
+          }
         }
-      }
-    });
+      );
 
-    return Array.from(map.values());
-  }, [dateFilteredOrders]);
-
-  // ==========================================================
-  // SEARCH FILTER
-  // ==========================================================
-
-  const filteredGroups = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase();
-
-    if (!query) {
-      return groupedOrders;
-    }
-
-    return groupedOrders.filter((group) => {
-      const customerMatch =
-        group.customerName
-          .toLowerCase()
-          .includes(query);
-
-      const itemMatch =
-        group.items.some((item) =>
-          item.name
-            .toLowerCase()
-            .includes(query)
-        );
-
-      return customerMatch || itemMatch;
-    });
-  }, [groupedOrders, search]);
+      return Array.from(
+        map.values()
+      );
+    }, [
+      dateFilteredOrders,
+    ]);
 
   // ==========================================================
-  // ITEM LIST FOR COUNTING
+  // SEARCH
   // ==========================================================
 
-  const countingItems = useMemo(() => {
-    const map = new Map<string, string>();
+  const filteredGroups =
+    useMemo(() => {
+      const query =
+        search
+          .trim()
+          .toLowerCase();
 
-    orders.forEach((order) => {
-      if (!Array.isArray(order.items)) {
-        return;
+      if (!query) {
+        return groupedOrders;
       }
 
-      order.items.forEach((item) => {
-        const name = String(
-          item.name || ""
-        ).trim();
+      return groupedOrders.filter(
+        (group) => {
+          const customerMatch =
+            group.customerName
+              .toLowerCase()
+              .includes(query);
 
-        if (!name) return;
+          const itemMatch =
+            group.items.some(
+              (item) =>
+                item.name
+                  .toLowerCase()
+                  .includes(
+                    query
+                  )
+            );
 
-        const key = name.toLowerCase();
-
-        if (!map.has(key)) {
-          map.set(key, name);
+          return (
+            customerMatch ||
+            itemMatch
+          );
         }
-      });
-    });
+      );
+    }, [
+      groupedOrders,
+      search,
+    ]);
 
-    return Array.from(map.values()).sort(
-      (a, b) => a.localeCompare(b)
-    );
-  }, [orders]);
+  // ==========================================================
+  // COUNTING ITEMS
+  // ==========================================================
+
+  const countingItems =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          string
+        >();
+
+      orders.forEach(
+        (order) => {
+          if (
+            !Array.isArray(
+              order.items
+            )
+          ) {
+            return;
+          }
+
+          order.items.forEach(
+            (item) => {
+              const name =
+                String(
+                  item.name || ""
+                ).trim();
+
+              if (!name) {
+                return;
+              }
+
+              const key =
+                name.toLowerCase();
+
+              if (
+                !map.has(key)
+              ) {
+                map.set(
+                  key,
+                  name
+                );
+              }
+            }
+          );
+        }
+      );
+
+      return Array.from(
+        map.values()
+      ).sort((a, b) =>
+        a.localeCompare(b)
+      );
+    }, [orders]);
 
   // ==========================================================
   // COUNTING DATE RANGE
   // ==========================================================
 
-  const getCountingDateRange = useMemo(() => {
-    if (!countingDate) {
-      return null;
-    }
-
-    const selected = new Date(
-      `${countingDate}T00:00:00`
-    );
-
-    if (Number.isNaN(selected.getTime())) {
-      return null;
-    }
-
-    let start = new Date(selected);
-    let end = new Date(selected);
-
-    if (countingPeriod === "daily") {
-      start = new Date(selected);
-      end = new Date(selected);
-    }
-
-    if (countingPeriod === "weekly") {
-      const day = selected.getDay();
-
-      // Monday = 0
-      const mondayOffset =
-        day === 0 ? -6 : 1 - day;
-
-      start = new Date(selected);
-      start.setDate(
-        selected.getDate() +
-          mondayOffset
-      );
-
-      end = new Date(start);
-      end.setDate(
-        start.getDate() + 6
-      );
-    }
-
-    if (countingPeriod === "monthly") {
-      start = new Date(
-        selected.getFullYear(),
-        selected.getMonth(),
-        1
-      );
-
-      end = new Date(
-        selected.getFullYear(),
-        selected.getMonth() + 1,
-        0
-      );
-    }
-
-    const startString = getDateOnly(
-      start.toISOString()
-    );
-
-    const endString = getDateOnly(
-      end.toISOString()
-    );
-
-    return {
-      start: startString,
-      end: endString,
-    };
-  }, [countingDate, countingPeriod]);
-
-  // ==========================================================
-  // ITEM COUNTING RESULT
-  // ==========================================================
-
-  const itemCountingResult = useMemo(() => {
-    if (!selectedCountingItem) {
-      return {
-        quantity: 0,
-        totalAmount: 0,
-        orders: 0,
-      };
-    }
-
-    let filtered = orders;
-
-    // Global date filter
-    if (fromDate || toDate) {
-      filtered = filtered.filter((order) => {
-        const date = getDateOnly(
-          order.createdAt
-        );
-
-        if (fromDate && date < fromDate) {
-          return false;
-        }
-
-        if (toDate && date > toDate) {
-          return false;
-        }
-
-        return true;
-      });
-    }
-
-    // Counting period/date filter
-    if (getCountingDateRange) {
-      filtered = filtered.filter((order) => {
-        const date = getDateOnly(
-          order.createdAt
-        );
-
-        return (
-          date >=
-            getCountingDateRange.start &&
-          date <=
-            getCountingDateRange.end
-        );
-      });
-    }
-
-    let quantity = 0;
-    let totalAmount = 0;
-    let matchingOrders = 0;
-
-    filtered.forEach((order) => {
-      if (!Array.isArray(order.items)) {
-        return;
+  const getCountingDateRange =
+    useMemo(() => {
+      if (!countingDate) {
+        return null;
       }
 
-      let orderHasItem = false;
+      const selected =
+        new Date(
+          `${countingDate}T00:00:00`
+        );
 
-      order.items.forEach((item) => {
-        const itemName = String(
-          item.name || ""
+      if (
+        Number.isNaN(
+          selected.getTime()
         )
-          .trim()
-          .toLowerCase();
-
-        const selectedName =
-          selectedCountingItem
-            .trim()
-            .toLowerCase();
-
-        if (itemName === selectedName) {
-          const itemQuantity =
-            Number(item.quantity) || 0;
-
-          const itemPrice =
-            Number(item.price) || 0;
-
-          quantity += itemQuantity;
-
-          totalAmount +=
-            itemPrice * itemQuantity;
-
-          orderHasItem = true;
-        }
-      });
-
-      if (orderHasItem) {
-        matchingOrders++;
+      ) {
+        return null;
       }
-    });
 
-    return {
-      quantity,
-      totalAmount,
-      orders: matchingOrders,
-    };
-  }, [
-    orders,
-    selectedCountingItem,
-    countingPeriod,
-    countingDate,
-    getCountingDateRange,
-    fromDate,
-    toDate,
-  ]);
+      let start =
+        new Date(selected);
+
+      let end =
+        new Date(selected);
+
+      if (
+        countingPeriod ===
+        "daily"
+      ) {
+        start =
+          new Date(selected);
+
+        end =
+          new Date(selected);
+      }
+
+      if (
+        countingPeriod ===
+        "weekly"
+      ) {
+        const day =
+          selected.getDay();
+
+        const mondayOffset =
+          day === 0
+            ? -6
+            : 1 - day;
+
+        start =
+          new Date(selected);
+
+        start.setDate(
+          selected.getDate() +
+            mondayOffset
+        );
+
+        end =
+          new Date(start);
+
+        end.setDate(
+          start.getDate() + 6
+        );
+      }
+
+      if (
+        countingPeriod ===
+        "monthly"
+      ) {
+        start =
+          new Date(
+            selected.getFullYear(),
+            selected.getMonth(),
+            1
+          );
+
+        end =
+          new Date(
+            selected.getFullYear(),
+            selected.getMonth() + 1,
+            0
+          );
+      }
+
+      const startString =
+        getDateOnly(
+          start.toISOString()
+        );
+
+      const endString =
+        getDateOnly(
+          end.toISOString()
+        );
+
+      return {
+        start: startString,
+        end: endString,
+      };
+    }, [
+      countingDate,
+      countingPeriod,
+    ]);
 
   // ==========================================================
-  // TOTAL ORDERS FOR COUNTING
+  // ITEM COUNTING
   // ==========================================================
 
-  const countingTotalOrders = useMemo(() => {
-    let result = orders;
+  const itemCountingResult =
+    useMemo(() => {
+      if (
+        !selectedCountingItem
+      ) {
+        return {
+          quantity: 0,
+          totalAmount: 0,
+          orders: 0,
+        };
+      }
 
-    if (fromDate || toDate) {
-      result = result.filter((order) => {
-        const date = getDateOnly(
-          order.createdAt
-        );
+      let filtered =
+        orders;
 
-        if (fromDate && date < fromDate) {
-          return false;
+      if (
+        fromDate ||
+        toDate
+      ) {
+        filtered =
+          filtered.filter(
+            (order) => {
+              const date =
+                getDateOnly(
+                  order.createdAt
+                );
+
+              if (
+                fromDate &&
+                date < fromDate
+              ) {
+                return false;
+              }
+
+              if (
+                toDate &&
+                date > toDate
+              ) {
+                return false;
+              }
+
+              return true;
+            }
+          );
+      }
+
+      if (
+        getCountingDateRange
+      ) {
+        filtered =
+          filtered.filter(
+            (order) => {
+              const date =
+                getDateOnly(
+                  order.createdAt
+                );
+
+              return (
+                date >=
+                  getCountingDateRange.start &&
+                date <=
+                  getCountingDateRange.end
+              );
+            }
+          );
+      }
+
+      let quantity = 0;
+
+      let totalAmount = 0;
+
+      let matchingOrders = 0;
+
+      filtered.forEach(
+        (order) => {
+          if (
+            !Array.isArray(
+              order.items
+            )
+          ) {
+            return;
+          }
+
+          let orderHasItem =
+            false;
+
+          order.items.forEach(
+            (item) => {
+              const itemName =
+                String(
+                  item.name || ""
+                )
+                  .trim()
+                  .toLowerCase();
+
+              const selectedName =
+                selectedCountingItem
+                  .trim()
+                  .toLowerCase();
+
+              if (
+                itemName ===
+                selectedName
+              ) {
+                const itemQuantity =
+                  Number(
+                    item.quantity
+                  ) || 0;
+
+                const itemPrice =
+                  Number(
+                    item.price
+                  ) || 0;
+
+                quantity +=
+                  itemQuantity;
+
+                totalAmount +=
+                  itemPrice *
+                  itemQuantity;
+
+                orderHasItem =
+                  true;
+              }
+            }
+          );
+
+          if (
+            orderHasItem
+          ) {
+            matchingOrders++;
+          }
         }
+      );
 
-        if (toDate && date > toDate) {
-          return false;
-        }
+      return {
+        quantity,
+        totalAmount,
+        orders:
+          matchingOrders,
+      };
+    }, [
+      orders,
+      selectedCountingItem,
+      countingDate,
+      getCountingDateRange,
+      fromDate,
+      toDate,
+    ]);
 
-        return true;
-      });
-    }
+  // ==========================================================
+  // COUNTING TOTAL ORDERS
+  // ==========================================================
 
-    if (getCountingDateRange) {
-      result = result.filter((order) => {
-        const date = getDateOnly(
-          order.createdAt
-        );
+  const countingTotalOrders =
+    useMemo(() => {
+      let result =
+        orders;
 
-        return (
-          date >=
-            getCountingDateRange.start &&
-          date <=
-            getCountingDateRange.end
-        );
-      });
-    }
+      if (
+        fromDate ||
+        toDate
+      ) {
+        result =
+          result.filter(
+            (order) => {
+              const date =
+                getDateOnly(
+                  order.createdAt
+                );
 
-    return result.length;
-  }, [
-    orders,
-    fromDate,
-    toDate,
-    getCountingDateRange,
-  ]);
+              if (
+                fromDate &&
+                date < fromDate
+              ) {
+                return false;
+              }
+
+              if (
+                toDate &&
+                date > toDate
+              ) {
+                return false;
+              }
+
+              return true;
+            }
+          );
+      }
+
+      if (
+        getCountingDateRange
+      ) {
+        result =
+          result.filter(
+            (order) => {
+              const date =
+                getDateOnly(
+                  order.createdAt
+                );
+
+              return (
+                date >=
+                  getCountingDateRange.start &&
+                date <=
+                  getCountingDateRange.end
+              );
+            }
+          );
+      }
+
+      return result.length;
+    }, [
+      orders,
+      fromDate,
+      toDate,
+      getCountingDateRange,
+    ]);
 
   // ==========================================================
   // TOGGLE GROUP
@@ -634,11 +1061,16 @@ export default function OrdersPage() {
   const toggleGroup = (
     customerName: string
   ) => {
-    setExpandedGroups((previous) => ({
-      ...previous,
-      [customerName]:
-        !previous[customerName],
-    }));
+    setExpandedGroups(
+      (previous) => ({
+        ...previous,
+
+        [customerName]:
+          !previous[
+            customerName
+          ],
+      })
+    );
   };
 
   // ==========================================================
@@ -646,39 +1078,105 @@ export default function OrdersPage() {
   // ==========================================================
 
   const handleAddItem = () => {
-    setFormData((previous) => ({
-      ...previous,
-      items: [
-        ...previous.items,
-        {
-          name: "",
-          price: 0,
-          quantity: 1,
-          total: 0,
-        },
-      ],
-    }));
+    setFormData(
+      (previous) => ({
+        ...previous,
+
+        items: [
+          ...previous.items,
+
+          {
+            name: "",
+            price: 0,
+            quantity: 1,
+            total: 0,
+          },
+        ],
+      })
+    );
   };
 
   // ==========================================================
   // REMOVE ITEM
+  //
+  // VERY IMPORTANT:
+  //
+  // Only subtract deleted item's exact total
+  // from CURRENT editable Items Calculated Total.
+  //
+  // Example:
+  //
+  // Current = 61,000
+  // Deleted item = 5,000
+  //
+  // New = 56,000
   // ==========================================================
 
   const handleRemoveItem = (
     index: number
   ) => {
-    setFormData((previous) => ({
-      ...previous,
-      items:
-        previous.items.filter(
-          (_, itemIndex) =>
-            itemIndex !== index
-        ),
-    }));
+    setFormData(
+      (previous) => {
+        const itemToDelete =
+          previous.items[index];
+
+        if (!itemToDelete) {
+          return previous;
+        }
+
+        const price =
+          Number(
+            itemToDelete.price
+          ) || 0;
+
+        const quantity =
+          Number(
+            itemToDelete.quantity
+          ) || 0;
+
+        const deletedItemTotal =
+          price * quantity;
+
+        /*
+         * IMPORTANT:
+         *
+         * This is the CURRENT user-edited value.
+         *
+         * Never recalculate it from all items here.
+         */
+        const currentCalculatedTotal =
+          Number(
+            previous.itemsCalculatedTotal
+          ) || 0;
+
+        const newCalculatedTotal =
+          currentCalculatedTotal -
+          deletedItemTotal;
+
+        return {
+          ...previous,
+
+          items:
+            previous.items.filter(
+              (_, itemIndex) =>
+                itemIndex !== index
+            ),
+
+          itemsCalculatedTotal:
+            Math.max(
+              0,
+              newCalculatedTotal
+            ),
+        };
+      }
+    );
   };
 
   // ==========================================================
   // UPDATE ITEM
+  //
+  // OLD TOTAL REMOVE
+  // NEW TOTAL ADD
   // ==========================================================
 
   const handleItemChange = (
@@ -689,50 +1187,137 @@ export default function OrdersPage() {
       | "quantity",
     value: string
   ) => {
-    setFormData((previous) => {
-      const updatedItems = [
-        ...previous.items,
-      ];
+    setFormData(
+      (previous) => {
+        const updatedItems =
+          [...previous.items];
 
-      const currentItem = {
-        ...updatedItems[index],
-      };
+        const oldItem =
+          updatedItems[index];
 
-      if (field === "name") {
-        currentItem.name = value;
-      } else if (field === "price") {
-        currentItem.price =
-          value === ""
-            ? 0
-            : Number(value);
-      } else {
-        currentItem.quantity =
-          value === ""
-            ? 0
-            : Number(value);
+        if (!oldItem) {
+          return previous;
+        }
+
+        // ====================================================
+        // OLD TOTAL
+        // ====================================================
+
+        const oldPrice =
+          Number(
+            oldItem.price
+          ) || 0;
+
+        const oldQuantity =
+          Number(
+            oldItem.quantity
+          ) || 0;
+
+        const oldTotal =
+          oldPrice *
+          oldQuantity;
+
+        // ====================================================
+        // CHANGE ITEM
+        // ====================================================
+
+        const currentItem = {
+          ...oldItem,
+        };
+
+        if (
+          field === "name"
+        ) {
+          currentItem.name =
+            value;
+        }
+
+        if (
+          field === "price"
+        ) {
+          currentItem.price =
+            value === ""
+              ? 0
+              : Number(value);
+        }
+
+        if (
+          field === "quantity"
+        ) {
+          currentItem.quantity =
+            value === ""
+              ? 0
+              : Number(value);
+        }
+
+        // ====================================================
+        // NEW TOTAL
+        // ====================================================
+
+        const newPrice =
+          Number(
+            currentItem.price
+          ) || 0;
+
+        const newQuantity =
+          Number(
+            currentItem.quantity
+          ) || 0;
+
+        const newTotal =
+          newPrice *
+          newQuantity;
+
+        currentItem.total =
+          newTotal;
+
+        updatedItems[index] =
+          currentItem;
+
+        // ====================================================
+        // CURRENT EDITABLE TOTAL
+        // ====================================================
+
+        const currentCalculatedTotal =
+          Number(
+            previous.itemsCalculatedTotal
+          ) || 0;
+
+        // ====================================================
+        // OLD REMOVE + NEW ADD
+        // ====================================================
+
+        const updatedCalculatedTotal =
+          currentCalculatedTotal -
+          oldTotal +
+          newTotal;
+
+        return {
+          ...previous,
+
+          items:
+            updatedItems,
+
+          itemsCalculatedTotal:
+            Math.max(
+              0,
+              updatedCalculatedTotal
+            ),
+        };
       }
-
-      currentItem.total =
-        (Number(currentItem.price) || 0) *
-        (Number(currentItem.quantity) || 0);
-
-      updatedItems[index] = currentItem;
-
-      return {
-        ...previous,
-        items: updatedItems,
-      };
-    });
+    );
   };
 
   // ==========================================================
-  // EDIT ORDER
+  // EDIT GROUP
   // ==========================================================
 
   const handleEdit = (
     group: GroupedOrder
   ) => {
-    setEditingOrder(group);
+    setEditingOrder(
+      group
+    );
 
     const fallbackTotal =
       calculateItemsTotal(
@@ -743,15 +1328,66 @@ export default function OrdersPage() {
       customerName:
         group.customerName,
 
-      items: group.items.map(
-        (item) => ({
-          ...item,
-        })
-      ),
+      /*
+       * ALL GROUP ITEMS
+       *
+       * Example:
+       *
+       * Order 6 = 6 items
+       * Order 7 = 5 items
+       *
+       * form = 11 items
+       */
+      items:
+        group.items.map(
+          (item) => ({
+            ...item,
 
+            orderId:
+              item.orderId,
+
+            price:
+              Number(
+                item.price
+              ) || 0,
+
+            quantity:
+              Number(
+                item.quantity
+              ) || 0,
+
+            total:
+              Number(
+                item.total ??
+                  (
+                    Number(
+                      item.price
+                    ) || 0
+                  ) *
+                  (
+                    Number(
+                      item.quantity
+                    ) || 0
+                  )
+              ),
+          })
+        ),
+
+      /*
+       * Customer Total
+       */
       total:
-        Number(group.total) || 0,
+        Number(
+          group.total
+        ) || 0,
 
+      /*
+       * VERY IMPORTANT:
+       *
+       * Use grouped saved editable total.
+       *
+       * Do not replace it with items calculation.
+       */
       itemsCalculatedTotal:
         group.itemsCalculatedTotal !==
           null &&
@@ -763,11 +1399,13 @@ export default function OrdersPage() {
           : fallbackTotal,
     });
 
-    setShowModal(true);
+    setShowModal(
+      true
+    );
   };
 
   // ==========================================================
-  // UPDATE ORDER
+  // UPDATE / MERGE ORDER
   // ==========================================================
 
   const handleUpdateOrder =
@@ -777,12 +1415,18 @@ export default function OrdersPage() {
       }
 
       const customerTotal =
-        Number(formData.total);
+        Number(
+          formData.total
+        );
 
       const itemsCalculatedTotal =
         Number(
           formData.itemsCalculatedTotal
         );
+
+      // ======================================================
+      // VALIDATION
+      // ======================================================
 
       if (
         !formData.customerName.trim()
@@ -790,6 +1434,7 @@ export default function OrdersPage() {
         alert(
           "Customer name is required"
         );
+
         return;
       }
 
@@ -801,6 +1446,7 @@ export default function OrdersPage() {
         alert(
           "Please enter a valid Customer Total"
         );
+
         return;
       }
 
@@ -812,57 +1458,100 @@ export default function OrdersPage() {
         alert(
           "Please enter a valid Items Calculated Total"
         );
+
         return;
       }
 
       try {
         setSaving(true);
 
-        const orderId =
+        /*
+         * Primary order will survive.
+         *
+         * Example:
+         *
+         * group.orderIds = [6, 7]
+         *
+         * orderId = 6
+         *
+         * Result:
+         *
+         * Order 6 = merged 11 items
+         * Order 7 = deleted
+         */
+        const primaryOrderId =
           editingOrder.id;
 
-        const response = await fetch(
-          "/api/orders",
-          {
-            method: "PUT",
+        /*
+         * ALL database orders in this group.
+         */
+        const groupOrderIds =
+          editingOrder.orderIds;
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        const response =
+          await fetch(
+            "/api/orders",
+            {
+              method: "PUT",
 
-            body: JSON.stringify({
-              orderId,
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
 
-              customerName:
-                formData.customerName.trim(),
+              body: JSON.stringify({
+                /*
+                 * Primary order
+                 */
+                orderId:
+                  primaryOrderId,
 
-              items:
-                formData.items.map(
-                  (item) => ({
-                    name:
-                      item.name.trim(),
+                /*
+                 * ALL orders that must be merged
+                 */
+                orderIds:
+                  groupOrderIds,
 
-                    price:
-                      Number(
-                        item.price
-                      ) || 0,
+                customerName:
+                  formData.customerName.trim(),
 
-                    quantity:
-                      Number(
-                        item.quantity
-                      ) || 0,
-                  })
-                ),
+                /*
+                 * ALL merged items
+                 */
+                items:
+                  formData.items.map(
+                    (item) => ({
+                      name:
+                        item.name.trim(),
 
-              total:
-                customerTotal,
+                      price:
+                        Number(
+                          item.price
+                        ) || 0,
 
-              itemsCalculatedTotal:
-                itemsCalculatedTotal,
-            }),
-          }
-        );
+                      quantity:
+                        Number(
+                          item.quantity
+                        ) || 0,
+                    })
+                  ),
+
+                /*
+                 * Customer Total
+                 */
+                total:
+                  customerTotal,
+
+                /*
+                 * USER EDITABLE TOTAL
+                 *
+                 * Send CURRENT value.
+                 */
+                itemsCalculatedTotal:
+                  itemsCalculatedTotal,
+              }),
+            }
+          );
 
         const data =
           await response.json();
@@ -877,13 +1566,25 @@ export default function OrdersPage() {
           );
         }
 
-        setShowModal(false);
-        setEditingOrder(null);
+        setShowModal(
+          false
+        );
 
+        setEditingOrder(
+          null
+        );
+
+        /*
+         * Reload from DB.
+         *
+         * This is important because
+         * old grouped orders have been deleted
+         * by backend.
+         */
         await fetchOrders();
 
         alert(
-          "Order updated successfully"
+          "Orders merged and updated successfully"
         );
       } catch (error: any) {
         console.error(
@@ -901,7 +1602,7 @@ export default function OrdersPage() {
     };
 
   // ==========================================================
-  // DELETE GROUP
+  // DELETE COMPLETE CUSTOMER GROUP
   // ==========================================================
 
   const handleDeleteGroup =
@@ -920,8 +1621,12 @@ export default function OrdersPage() {
       try {
         setLoading(true);
 
+        /*
+         * Delete every order in this group.
+         */
         for (
-          const orderId of group.orderIds
+          const orderId of
+            group.orderIds
         ) {
           const response =
             await fetch(
@@ -981,39 +1686,83 @@ export default function OrdersPage() {
   const handlePrint = (
     group: GroupedOrder
   ) => {
+    const escapeHtml = (
+      value: any
+    ) => {
+      return String(
+        value ?? ""
+      )
+        .replace(
+          /&/g,
+          "&amp;"
+        )
+        .replace(
+          /</g,
+          "&lt;"
+        )
+        .replace(
+          />/g,
+          "&gt;"
+        )
+        .replace(
+          /"/g,
+          "&quot;"
+        )
+        .replace(
+          /'/g,
+          "&#039;"
+        );
+    };
+
     const itemsRows =
       group.items
-        .map(
-          (item) => `
+        .map((item) => {
+          const itemTotal =
+            Number(
+              item.total ??
+                Number(
+                  item.price
+                ) *
+                  Number(
+                    item.quantity
+                  )
+            ) || 0;
+
+          return `
             <tr>
-              <td>${item.name}</td>
-              <td>${Number(
-                item.price
-              ).toLocaleString()}</td>
-              <td>${Number(
-                item.quantity
-              ).toLocaleString()}</td>
-              <td>${Number(
-                item.total ??
-                  Number(item.price) *
-                    Number(item.quantity)
-              ).toLocaleString()}</td>
+              <td>
+                ${escapeHtml(
+                  item.name
+                )}
+              </td>
+
+              <td>
+                ${Number(
+                  item.price
+                ).toLocaleString()}
+              </td>
+
+              <td>
+                ${Number(
+                  item.quantity
+                ).toLocaleString()}
+              </td>
+
+              <td>
+                ${itemTotal.toLocaleString()}
+              </td>
             </tr>
-          `
-        )
+          `;
+        })
         .join("");
 
-    const customerTotal =
-      Number(group.total) || 0;
-
+    /*
+     * Print USER EDITABLE total.
+     */
     const itemsCalculatedTotal =
       Number(
         group.itemsCalculatedTotal
       ) || 0;
-
-    const difference =
-      customerTotal -
-      itemsCalculatedTotal;
 
     const printWindow =
       window.open(
@@ -1026,16 +1775,23 @@ export default function OrdersPage() {
       alert(
         "Please allow popup to print"
       );
+
       return;
     }
 
     printWindow.document.write(`
       <!DOCTYPE html>
+
       <html>
+
         <head>
-          <title>Customer Order</title>
+
+          <title>
+            Customer Order
+          </title>
 
           <style>
+
             @page {
               size: 80mm auto;
               margin: 0;
@@ -1051,7 +1807,7 @@ export default function OrdersPage() {
               width: 80mm;
               font-family: Arial, sans-serif;
               font-size: 12px;
-              font-weight:bold;
+              font-weight: bold;
               color: #000;
             }
 
@@ -1079,8 +1835,8 @@ export default function OrdersPage() {
             table {
               width: 100%;
               border-collapse: collapse;
-              font-weight:bold;
-              font-size:12px;
+              font-weight: bold;
+              font-size: 12px;
             }
 
             th,
@@ -1097,29 +1853,30 @@ export default function OrdersPage() {
 
             .right {
               text-align: right;
-              font-weight:bold;
-              font-size:16px;
-            }
-
-            .total-row {
               font-weight: bold;
-              font-size: 14px;
+              font-size: 16px;
             }
 
             .footer {
-              margin-top: 5px;
-              
+              margin-top: 10px;
               font-size: 11px;
             }
-              .footer .flex{
-                display: flex;
-                gap: 5px;}
-                .dox{
-                 font-size:12px;
-                 text-align:center;
-                }
+
+            .signature {
+              margin-top: 10px;
+              text-align: left;
+              font-size: 12px;
+            }
+
+            .dox {
+              font-size: 12px;
+              text-align: center;
+              line-height: 1.5;
+              margin-top: 15px;
+            }
 
           </style>
+
         </head>
 
         <body>
@@ -1131,7 +1888,10 @@ export default function OrdersPage() {
           <div class="line"></div>
 
           <div class="customer">
-            Customer: ${group.customerName}
+            Customer:
+            ${escapeHtml(
+              group.customerName
+            )}
           </div>
 
           <div>
@@ -1144,61 +1904,79 @@ export default function OrdersPage() {
           <div class="line"></div>
 
           <table>
+
             <thead>
+
               <tr>
                 <th>Item</th>
                 <th>Price</th>
                 <th>Qty</th>
                 <th>Total</th>
               </tr>
+
             </thead>
 
             <tbody>
               ${itemsRows}
             </tbody>
+
           </table>
 
           <div class="line"></div>
 
           <table>
+
             <tr>
+
               <td>
                 Items Calculated Total
               </td>
 
               <td class="right">
-                Rs ${itemsCalculatedTotal.toLocaleString()}
+                Rs
+                ${itemsCalculatedTotal.toLocaleString()}
               </td>
+
             </tr>
 
-           
-           
           </table>
 
           <div class="footer">
-            <div className="flex gap-2">
-                    <p>Sign ___________</p>
-                    
-                  </div>
-                </div>
-              </div>
 
-              <h3 class="dox">
-                بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
-              </h3>
+            <div class="signature">
+              Sign ___________
+            </div>
+
           </div>
 
-          <script>
-            window.onload = function () {
-              window.print();
+          <h3 class="dox">
+            بسم اللہ آئرن سٹور
+            <br />
+            جمالپور نزد ماہر والا پٹرول پمپ
+            <br />
+            قائم پور روڈ
+          </h3>
 
-              setTimeout(function () {
-                window.close();
-              }, 500);
-            };
+          <script>
+
+            window.onload =
+              function () {
+
+                window.print();
+
+                setTimeout(
+                  function () {
+                    window.close();
+                  },
+                  500
+                );
+
+              };
+
           </script>
 
         </body>
+
       </html>
     `);
 
@@ -1227,7 +2005,8 @@ export default function OrdersPage() {
   const totalItems =
     groupedOrders.reduce(
       (sum, group) =>
-        sum + group.items.length,
+        sum +
+        group.items.length,
       0
     );
 
@@ -1240,15 +2019,16 @@ export default function OrdersPage() {
 
       <div className="max-w-7xl mx-auto">
 
-        {/* =====================================================
+        {/* ====================================================
             HEADER
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="bg-white rounded-2xl shadow-sm border p-5 mb-6">
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
             <div>
+
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                 Customer Orders
               </h1>
@@ -1256,11 +2036,16 @@ export default function OrdersPage() {
               <p className="text-gray-500 mt-1">
                 Manage customer orders
               </p>
+
             </div>
 
             <button
-              onClick={fetchOrders}
-              disabled={loading}
+              onClick={
+                fetchOrders
+              }
+              disabled={
+                loading
+              }
               className="px-5 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
             >
               {loading
@@ -1272,15 +2057,16 @@ export default function OrdersPage() {
 
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
             DATE FILTER
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="bg-white border shadow-sm rounded-2xl p-5 mb-6">
 
           <div className="flex items-center justify-between mb-4">
 
             <div>
+
               <h2 className="text-lg font-bold text-gray-900">
                 Order Date Filter
               </h2>
@@ -1288,11 +2074,14 @@ export default function OrdersPage() {
               <p className="text-sm text-gray-500">
                 Filter orders by created date
               </p>
+
             </div>
 
             <button
               type="button"
-              onClick={clearDates}
+              onClick={
+                clearDates
+              }
               className="px-4 py-2 rounded-xl bg-red-100 text-red-600 hover:bg-red-200 font-semibold"
             >
               Clear Date
@@ -1302,16 +2091,17 @@ export default function OrdersPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-            {/* FROM DATE */}
-
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 From Date
               </label>
 
               <input
                 type="date"
-                value={fromDate}
+                value={
+                  fromDate
+                }
                 onChange={(e) =>
                   setFromDate(
                     e.target.value
@@ -1319,19 +2109,24 @@ export default function OrdersPage() {
                 }
                 className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+
             </div>
 
-            {/* TO DATE */}
-
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 To Date
               </label>
 
               <input
                 type="date"
-                value={toDate}
-                min={fromDate || undefined}
+                value={
+                  toDate
+                }
+                min={
+                  fromDate ||
+                  undefined
+                }
                 onChange={(e) =>
                   setToDate(
                     e.target.value
@@ -1339,11 +2134,13 @@ export default function OrdersPage() {
                 }
                 className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+
             </div>
 
           </div>
 
-          {(fromDate || toDate) && (
+          {(fromDate ||
+            toDate) && (
             <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
               Showing orders
               {fromDate
@@ -1357,15 +2154,16 @@ export default function OrdersPage() {
 
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
             ITEM COUNTING
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="bg-white border shadow-sm rounded-2xl p-5 mb-6">
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
 
             <div>
+
               <h2 className="text-xl font-bold text-gray-900">
                 Item Counting
               </h2>
@@ -1373,10 +2171,12 @@ export default function OrdersPage() {
               <p className="text-sm text-gray-500 mt-1">
                 Count quantity and total amount of a selected item
               </p>
+
             </div>
 
             <div className="text-sm font-semibold text-gray-700 bg-gray-100 px-4 py-2 rounded-xl">
               Total Orders:
+              {" "}
               {countingTotalOrders}
             </div>
 
@@ -1384,15 +2184,16 @@ export default function OrdersPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-            {/* SELECT ITEM */}
-
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Select Item
               </label>
 
               <select
-                value={selectedCountingItem}
+                value={
+                  selectedCountingItem
+                }
                 onChange={(e) =>
                   setSelectedCountingItem(
                     e.target.value
@@ -1400,6 +2201,7 @@ export default function OrdersPage() {
                 }
                 className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
+
                 <option value="">
                   Select Item
                 </option>
@@ -1414,18 +2216,21 @@ export default function OrdersPage() {
                     </option>
                   )
                 )}
+
               </select>
+
             </div>
 
-            {/* COUNTING PERIOD */}
-
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Counting Period
               </label>
 
               <select
-                value={countingPeriod}
+                value={
+                  countingPeriod
+                }
                 onChange={(e) => {
                   setCountingPeriod(
                     e.target.value as
@@ -1436,6 +2241,7 @@ export default function OrdersPage() {
                 }}
                 className="w-full border rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
+
                 <option value="daily">
                   Daily
                 </option>
@@ -1447,19 +2253,22 @@ export default function OrdersPage() {
                 <option value="monthly">
                   Monthly
                 </option>
+
               </select>
+
             </div>
 
-            {/* SELECT DATE */}
-
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Select Date
               </label>
 
               <input
                 type="date"
-                value={countingDate}
+                value={
+                  countingDate
+                }
                 onChange={(e) =>
                   setCountingDate(
                     e.target.value
@@ -1467,15 +2276,12 @@ export default function OrdersPage() {
                 }
                 className="w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+
             </div>
 
           </div>
 
-          {/* COUNTING RESULT */}
-
           <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-
-            {/* SELECTED ITEM */}
 
             <div className="border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
 
@@ -1489,8 +2295,6 @@ export default function OrdersPage() {
               </div>
 
             </div>
-
-            {/* QUANTITY */}
 
             <div className="border-2 border-green-500 bg-green-50 rounded-2xl p-5">
 
@@ -1516,8 +2320,6 @@ export default function OrdersPage() {
 
             </div>
 
-            {/* TOTAL AMOUNT */}
-
             <div className="border-2 border-orange-500 bg-orange-50 rounded-2xl p-5">
 
               <div className="text-sm font-semibold text-orange-700">
@@ -1532,7 +2334,10 @@ export default function OrdersPage() {
               </div>
 
               <div className="text-xs text-orange-700 mt-1">
-                {itemCountingResult.orders} matching order
+                {
+                  itemCountingResult.orders
+                }{" "}
+                matching order
                 {itemCountingResult.orders !==
                 1
                   ? "s"
@@ -1546,22 +2351,31 @@ export default function OrdersPage() {
           {countingDate &&
             getCountingDateRange && (
               <div className="mt-4 bg-gray-50 border rounded-xl p-3 text-sm text-gray-600">
+
                 Counting period:
+
                 <strong className="ml-1">
-                  {getCountingDateRange.start}
+                  {
+                    getCountingDateRange.start
+                  }
                 </strong>
+
                 {" "}to{" "}
+
                 <strong>
-                  {getCountingDateRange.end}
+                  {
+                    getCountingDateRange.end
+                  }
                 </strong>
+
               </div>
             )}
 
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
             STATS
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
@@ -1572,7 +2386,9 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {totalCustomers}
+              {
+                totalCustomers
+              }
             </div>
 
           </div>
@@ -1584,7 +2400,9 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {totalOrders}
+              {
+                totalOrders
+              }
             </div>
 
           </div>
@@ -1596,16 +2414,18 @@ export default function OrdersPage() {
             </div>
 
             <div className="text-3xl font-bold mt-2">
-              {totalItems}
+              {
+                totalItems
+              }
             </div>
 
           </div>
 
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
             SEARCH
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="bg-white border shadow-sm rounded-2xl p-4 mb-6">
 
@@ -1632,9 +2452,9 @@ export default function OrdersPage() {
 
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
             ORDERS
-        ===================================================== */}
+        ==================================================== */}
 
         <div className="space-y-4">
 
@@ -1651,12 +2471,6 @@ export default function OrdersPage() {
                 !!expandedGroups[
                   group.customerName
                 ];
-
-              // const difference =
-              //   Number(group.total) -
-              //   Number(
-              //     group.itemsCalculatedTotal
-              //   );
 
               return (
                 <div
@@ -1698,15 +2512,26 @@ export default function OrdersPage() {
                             1
                               ? "s"
                               : ""}
+
+                            {" • "}
+
+                            {
+                              group.orderIds.length
+                            }{" "}
+                            order
+                            {group.orderIds.length !==
+                            1
+                              ? "s"
+                              : ""}
                           </p>
 
                         </div>
 
                       </div>
 
-                      {/* TOTALS */}
+                      {/* ITEMS CALCULATED TOTAL */}
 
-                      <div className="flex justify-end ">
+                      <div className="flex justify-end">
 
                         <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
 
@@ -1722,21 +2547,6 @@ export default function OrdersPage() {
                           </div>
 
                         </div>
-
-                   
-
-                        {/* <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
-
-                          <div className="text-xs text-orange-600 font-medium">
-                            Difference
-                          </div>
-
-                          <div className="font-bold text-orange-900 mt-1">
-                            Rs{" "}
-                            {difference.toLocaleString()}
-                          </div>
-
-                        </div> */}
 
                       </div>
 
@@ -1754,6 +2564,7 @@ export default function OrdersPage() {
                         }
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-medium"
                       >
+
                         {isExpanded ? (
                           <ChevronUp
                             size={18}
@@ -1767,6 +2578,7 @@ export default function OrdersPage() {
                         {isExpanded
                           ? "Hide Items"
                           : "Show Items"}
+
                       </button>
 
                       <button
@@ -1777,11 +2589,13 @@ export default function OrdersPage() {
                         }
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium"
                       >
+
                         <Pencil
                           size={17}
                         />
 
                         Edit
+
                       </button>
 
                       <button
@@ -1792,11 +2606,13 @@ export default function OrdersPage() {
                         }
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-900 font-medium"
                       >
+
                         <Printer
                           size={17}
                         />
 
                         Print
+
                       </button>
 
                       <button
@@ -1807,11 +2623,13 @@ export default function OrdersPage() {
                         }
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 font-medium"
                       >
+
                         <Trash2
                           size={17}
                         />
 
                         Delete
+
                       </button>
 
                     </div>
@@ -1869,14 +2687,16 @@ export default function OrdersPage() {
                                 <tr
                                   key={
                                     item.id ??
-                                    `${group.id}-${index}`
+                                    `${item.orderId}-${group.id}-${index}`
                                   }
                                   className="border-b last:border-b-0"
                                 >
 
                                   <td className="p-3">
-                                    {index +
-                                      1}
+                                    {
+                                      index +
+                                      1
+                                    }
                                   </td>
 
                                   <td className="p-3 whitespace-nowrap">
@@ -1965,12 +2785,29 @@ export default function OrdersPage() {
                     }
                   </p>
 
+                  <p className="text-xs text-blue-600 mt-1">
+                    Merging{" "}
+                    {
+                      editingOrder.orderIds.length
+                    }{" "}
+                    orders into one order
+                  </p>
+
                 </div>
 
                 <button
                   onClick={() => {
-                    setShowModal(false);
-                    setEditingOrder(null);
+                    if (saving) {
+                      return;
+                    }
+
+                    setShowModal(
+                      false
+                    );
+
+                    setEditingOrder(
+                      null
+                    );
                   }}
                   className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
                 >
@@ -1996,8 +2833,11 @@ export default function OrdersPage() {
                     }
                     onChange={(e) =>
                       setFormData(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
+
                           customerName:
                             e.target.value,
                         })
@@ -2008,7 +2848,9 @@ export default function OrdersPage() {
 
                 </div>
 
-                {/* ITEMS */}
+                {/* =================================================
+                    ITEMS
+                ================================================= */}
 
                 <div className="border rounded-2xl overflow-hidden mb-5">
 
@@ -2021,7 +2863,7 @@ export default function OrdersPage() {
                       </h3>
 
                       <p className="text-xs text-gray-500">
-                        Item total is calculated from price × quantity.
+                        Item total = Price × Quantity
                       </p>
 
                     </div>
@@ -2033,11 +2875,13 @@ export default function OrdersPage() {
                       }
                       className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
                     >
+
                       <Plus
                         size={17}
                       />
 
                       Add Item
+
                     </button>
 
                   </div>
@@ -2045,7 +2889,8 @@ export default function OrdersPage() {
                   <div className="p-4 space-y-3">
 
                     {formData.items
-                      .length === 0 && (
+                      .length ===
+                      0 && (
                       <div className="text-center text-gray-500 py-6">
                         No items
                       </div>
@@ -2083,7 +2928,8 @@ export default function OrdersPage() {
                                 handleItemChange(
                                   index,
                                   "name",
-                                  e.target.value
+                                  e.target
+                                    .value
                                 )
                               }
                               className="w-full border rounded-lg px-3 py-2"
@@ -2111,7 +2957,8 @@ export default function OrdersPage() {
                                 handleItemChange(
                                   index,
                                   "price",
-                                  e.target.value
+                                  e.target
+                                    .value
                                 )
                               }
                               className="w-full border rounded-lg px-3 py-2"
@@ -2139,7 +2986,8 @@ export default function OrdersPage() {
                                 handleItemChange(
                                   index,
                                   "quantity",
-                                  e.target.value
+                                  e.target
+                                    .value
                                 )
                               }
                               className="w-full border rounded-lg px-3 py-2"
@@ -2156,7 +3004,9 @@ export default function OrdersPage() {
                             </label>
 
                             <div className="border rounded-lg px-3 py-2 bg-gray-50 font-semibold text-right">
+
                               Rs{" "}
+
                               {(
                                 Number(
                                   item.price
@@ -2165,6 +3015,7 @@ export default function OrdersPage() {
                                   item.quantity
                                 )
                               ).toLocaleString()}
+
                             </div>
 
                           </div>
@@ -2182,9 +3033,11 @@ export default function OrdersPage() {
                               }
                               className="w-full h-10 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center"
                             >
+
                               <Trash2
                                 size={18}
                               />
+
                             </button>
 
                           </div>
@@ -2197,23 +3050,21 @@ export default function OrdersPage() {
 
                 </div>
 
-                {/* TOTALS */}
+                {/* =================================================
+                    ITEMS CALCULATED TOTAL
+                ================================================= */}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex justify-end">
 
-                  {/* CUSTOMER TOTAL */}
-
-                 
-
-                  {/* ITEMS CALCULATED TOTAL */}
-<div className="flex justify-end">
-                  <div className="  border-2 border-blue-500 bg-blue-50 rounded-2xl p-5">
+                  <div className="border-2 border-blue-500 bg-blue-50 rounded-2xl p-5 w-full md:w-auto">
 
                     <label className="block text-sm font-bold text-blue-900 mb-1">
                       Items Calculated Total
                     </label>
 
-                    
+                    <p className="text-xs text-blue-700 mb-3">
+                      Editable total. Item delete/update will modify this current value.
+                    </p>
 
                     <div className="flex items-center gap-2">
 
@@ -2229,16 +3080,27 @@ export default function OrdersPage() {
                         }
                         onChange={(e) => {
                           const value =
-                            e.target.value ===
+                            e.target
+                              .value ===
                             ""
                               ? 0
                               : Number(
-                                  e.target.value
+                                  e.target
+                                    .value
                                 );
 
                           setFormData(
-                            (previous) => ({
+                            (
+                              previous
+                            ) => ({
                               ...previous,
+
+                              /*
+                               * IMPORTANT:
+                               *
+                               * This is the new manual
+                               * source value.
+                               */
                               itemsCalculatedTotal:
                                 Number.isFinite(
                                   value
@@ -2248,68 +3110,42 @@ export default function OrdersPage() {
                             })
                           );
                         }}
-                        className="w-full border-2 border-blue-400 rounded-lg px-3 py-3 text-xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full md:w-64 border-2 border-blue-400 rounded-lg px-3 py-3 text-xl font-bold text-right bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
 
                     </div>
 
                   </div>
-</div>
-                  {/* DIFFERENCE
-
-                  <div className="border-2 border-orange-400 bg-orange-50 rounded-2xl p-5">
-
-                    <div className="text-sm font-bold text-orange-900">
-                      Difference
-                    </div>
-
-                    <p className="text-xs text-orange-600 mb-2">
-                      Customer Total − Items Calculated Total
-                    </p>
-
-                    <div className="text-2xl font-bold text-orange-900 mt-3">
-                      Rs{" "}
-                      {(
-                        Number(
-                          formData.total
-                        ) -
-                        Number(
-                          formData.itemsCalculatedTotal
-                        )
-                      ).toLocaleString()}
-                    </div>
-
-                  </div> */}
 
                 </div>
 
-                {/* NOTE */}
+                {/* =================================================
+                    LOGIC NOTE
+                ================================================= */}
 
-                <div className="mt-5 bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-
-                  <strong>
-                    Note:
-                  </strong>{" "}
-                  Items Calculated Total is
-                  manually editable. Changing
-                  item price or quantity will
-                  not automatically change this
-                  value.
-
-                </div>
+                
 
               </div>
 
-              {/* MODAL FOOTER */}
+              {/* =================================================
+                  MODAL FOOTER
+              ================================================= */}
 
               <div className="sticky bottom-0 bg-white border-t px-5 py-4 flex flex-col sm:flex-row justify-end gap-3">
 
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                   onClick={() => {
-                    setShowModal(false);
-                    setEditingOrder(null);
+                    setShowModal(
+                      false
+                    );
+
+                    setEditingOrder(
+                      null
+                    );
                   }}
                   className="px-5 py-3 rounded-xl border border-gray-300 hover:bg-gray-100 font-semibold disabled:opacity-50"
                 >
@@ -2318,15 +3154,17 @@ export default function OrdersPage() {
 
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                   onClick={
                     handleUpdateOrder
                   }
                   className="px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-semibold disabled:opacity-50"
                 >
                   {saving
-                    ? "Saving..."
-                    : "Save Changes"}
+                    ? "Merging..."
+                    : "Save & Merge"}
                 </button>
 
               </div>
