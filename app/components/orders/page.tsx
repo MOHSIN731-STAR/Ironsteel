@@ -29,6 +29,7 @@ interface Item {
   price: number;
   quantity: number;
   total?: number;
+  entryDate?: string;
 }
 
 interface Order {
@@ -200,6 +201,9 @@ export default function OrdersPage() {
                         ...item,
                         orderId:
                           order.id,
+                        // Keep the actual entry date of this item's order.
+                        entryDate:
+                          order.createdAt,
                         price,
                         quantity,
                         total:
@@ -520,6 +524,12 @@ export default function OrdersPage() {
 
                     orderId:
                       order.id,
+
+                    // Every item gets the date of the order
+                    // in which it was originally entered.
+                    entryDate:
+                      item.entryDate ||
+                      order.createdAt,
 
                     price:
                       Number(
@@ -1421,6 +1431,11 @@ export default function OrdersPage() {
                     ) || 0
                   )
               ),
+
+            // Preserve the original entry date while editing.
+            entryDate:
+              item.entryDate ||
+              group.createdAt,
           })
         ),
 
@@ -2765,7 +2780,8 @@ export default function OrdersPage() {
 
                                   <td className="p-3 whitespace-nowrap">
                                     {formatDate(
-                                      group.createdAt
+                                      item.entryDate ||
+                                        group.createdAt
                                     )}
                                   </td>
 
