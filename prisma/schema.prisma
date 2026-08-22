@@ -107,6 +107,6 @@ model WalkingItem {
 
   name     String?
   price    Float?
-  quantity Int?
+  quantity Float?
   total    Float?
 }
