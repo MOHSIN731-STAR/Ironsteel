@@ -56,17 +56,17 @@ export default function LoginPage() {
       {/* Small Login Card */}
       <div className="relative z-10 w-full max-w-sm">
 
-        <div className="rounded-2xl border border-white/10 bg-[#6E6E6E] p-6 shadow-2xl shadow-purple-950/40 backdrop-blur-2xl">
+        <div className="rounded-2xl border border-white/10 bg-[#7272a8] p-6 shadow-2xl shadow-purple-950/40 backdrop-blur-2xl">
 
           {/* Logo */}
           <div className="mb-5 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 via-yellow-500 to-orange-600 shadow-lg shadow-amber-500/30">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-300 via-blue-500 to-blue-900 shadow-lg shadow-amber-500/30">
               <span className="text-2xl font-black text-black">
                 I
               </span>
             </div>
 
-            <h1 className="bg-gradient-to-r from-yellow-200 via-amber-400 to-orange-400 bg-clip-text text-3xl font-extrabold text-transparent">
+            <h1 className="bg-gradient-to-r from-blue-200 via-blue-400 to-blue-400 bg-clip-text text-3xl font-extrabold text-transparent">
               Iron Steel Store
             </h1>
 
@@ -101,7 +101,7 @@ export default function LoginPage() {
                   })
                 }
                 required
-                className="w-full rounded-lg border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none placeholder:text-gray-600 transition focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none placeholder:text-gray-600 transition focus:border-blue-400/70 focus:ring-2 focus:ring-blue-400/20"
               />
             </div>
 
@@ -122,7 +122,7 @@ export default function LoginPage() {
                   })
                 }
                 required
-                className="w-full rounded-lg border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none placeholder:text-gray-600 transition focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none placeholder:text-gray-600 transition focus:border-blue-400/70 focus:ring-2 focus:ring-blue-400/20"
               />
             </div>
 
@@ -132,7 +132,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500 py-3 text-sm font-bold text-black shadow-lg shadow-amber-500/20 transition hover:scale-[1.01] hover:shadow-amber-500/40 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-gradient-to-r from-blue-600 via-blue-500 to-blue-500 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:scale-[1.01] hover:shadow-blue-500/40 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? "Logging in..." : "Login"}
             </button>

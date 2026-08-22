@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import ProductCard from "./../components/ProductCard";
 import { Product } from "./../types/product";
-
+import { useRouter } from "next/navigation";
 const products: Product[] = [
   { id: 1, name: "DGسیمنٹ", image: "/DGسیمنٹ.png" },
   { id: 2, name: "پاکستان سیمنٹ", image: "/pk.png" },
@@ -32,6 +32,7 @@ const products: Product[] = [
 export default function Products() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const checkLogin = async () => {
@@ -54,7 +55,8 @@ export default function Products() {
 
   const handleProductClick = (product: Product) => {
     if (!isLoggedIn) {
-      alert("Please login required");
+      
+      router.push("/components/login");
       return;
     }
 

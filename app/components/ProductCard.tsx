@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { useCart } from "./../context/CartContext";
 import { Product } from "./../types/product";
 
+
+import { useRouter } from "next/navigation";
+
 interface ProductCardProps {
   product: Product;
 }
@@ -14,7 +17,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
-
+const router = useRouter();
   // Check login status
   useEffect(() => {
     const checkLogin = async () => {
@@ -38,7 +41,8 @@ export default function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = () => {
     // Login nahi hai
     if (!isLoggedIn) {
-      alert("Please login required");
+      
+      router.push("/components/login");
       return;
     }
 
