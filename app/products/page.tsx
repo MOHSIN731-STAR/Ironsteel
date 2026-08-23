@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import ProductCard from "./../components/ProductCard";
 import { Product } from "./../types/product";
 import { useRouter } from "next/navigation";
+import Calculator from "./../components/Calculator";
 const products: Product[] = [
   { id: 1, name: "DGسیمنٹ", image: "/DGسیمنٹ.png" },
   { id: 2, name: "پاکستان سیمنٹ", image: "/pk.png" },
@@ -70,7 +71,7 @@ export default function Products() {
 
   return (
     <div>
-   
+      <Calculator />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {products.map((product) => (

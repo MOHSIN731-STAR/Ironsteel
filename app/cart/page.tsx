@@ -6,6 +6,7 @@ import { useCart } from "./../context/CartContext";
 import Image from "next/image";
 import Link from "next/link";
 import { printBillFromElement } from "../lib/printBill";
+import Calculator from "./../components/Calculator";
 
 type PriceMap = Record<number, number>;
 
@@ -146,6 +147,7 @@ export default function Cart() {
 
   return (
     <>
+
       <div className="container mx-auto py-10 px-4">
         <h1 className="text-4xl font-bold mb-8">Your Cart</h1>
 
@@ -351,7 +353,7 @@ export default function Cart() {
           </div>
         </div>
       </div>
-
+   <Calculator/>
       {showPrint &&
         createPortal(
           <div
