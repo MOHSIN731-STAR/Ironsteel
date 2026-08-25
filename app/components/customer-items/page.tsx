@@ -1257,7 +1257,9 @@ export default function CustomerItemsPage() {
                   <option value="سیمنٹ DG">
                     سیمنٹ DG
                   </option>
-
+                  <option value="گاڈرمغل">
+                  گاڈرمغل
+                  </option>
                   <option value="سیمنٹ PK">
                     سیمنٹ PK
                   </option>
@@ -1282,9 +1284,16 @@ export default function CustomerItemsPage() {
                     ٹی یار70*70
                   </option>
 
-                  <option value="Bajri">
+                  <option value="بجری">
                     بجری
                   </option>
+                  <option value="ٹائل فٹ والی">
+                    ٹائل فٹ والی
+                  </option>
+ <option value="ٹائل 10انچ والی">
+                    ٹائل 10انچ والی
+                  </option>
+
 
                   <option value="amount Jama">
                     amount Jama
