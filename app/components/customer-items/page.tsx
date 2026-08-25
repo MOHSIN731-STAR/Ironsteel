@@ -1293,7 +1293,10 @@ export default function CustomerItemsPage() {
  <option value="ٹائل 10انچ والی">
                     ٹائل 10انچ والی
                   </option>
-
+      
+ <option value="ٹی یار چوکاٹ">
+                    ٹی یار چوکا ٹی
+                  </option>
 
                   <option value="amount Jama">
                     amount Jama
