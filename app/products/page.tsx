@@ -28,6 +28,7 @@ const products: Product[] = [
   { id: 20, name: "white cement", image: "/white_cement.jpg" },
   { id: 21, name: "جالی ریت", image: "/jali.jpg" },
   { id: 22, name: "بلیڈ", image: "/blades.webp" },
+  { id: 23, name: "تار برش", image: "/barish.png" },
 ];
 
 export default function Products() {
