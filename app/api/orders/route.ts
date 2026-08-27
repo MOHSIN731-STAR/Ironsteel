@@ -107,7 +107,12 @@ export async function POST(req: NextRequest) {
 // GET ORDERS
 // ============================================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const orders = await prisma.order.findMany({
       orderBy: {
@@ -140,6 +145,11 @@ export async function GET() {
 // ============================================================
 
 export async function PUT(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const body = await request.json();
 
@@ -360,6 +370,11 @@ export async function PUT(request: NextRequest) {
 // ============================================================
 
 export async function DELETE(request: NextRequest) {
+  const auth = requireAuth(request);
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
   try {
     const body = await request.json();
 
