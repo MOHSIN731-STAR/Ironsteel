@@ -56,8 +56,12 @@ const router = useRouter();
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden"  onClick={handleAddToCart}
-          disabled={checkingAuth}>
+    <div
+  className={`bg-white rounded-lg shadow-md overflow-hidden ${
+    checkingAuth ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+  }`}
+  onClick={handleAddToCart}
+>
       {/* Product Image */}
       <div className="relative w-full h-56" >
         <Image
