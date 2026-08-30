@@ -56,9 +56,10 @@ const router = useRouter();
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white rounded-lg shadow-md overflow-hidden"  onClick={handleAddToCart}
+          disabled={checkingAuth}>
       {/* Product Image */}
-      <div className="relative w-full h-56">
+      <div className="relative w-full h-56" >
         <Image
           src={product.image}
           alt={product.name}
