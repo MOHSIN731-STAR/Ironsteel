@@ -78,13 +78,6 @@ const router = useRouter();
           {product.name}
         </h3>
 
-        <button
-          onClick={handleAddToCart}
-          disabled={checkingAuth}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-md font-medium transition-colors"
-        >
-          {checkingAuth ? "Checking..." : "Add to Cart"}
-        </button>
       </div>
     </div>
   );
