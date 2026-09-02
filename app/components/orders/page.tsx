@@ -1160,12 +1160,9 @@ export default function OrdersPage() {
 
         <body>
 
-          <div class="center title">
-            Customer Order
-          </div>
+          
 
-          <div class="line"></div>
-
+          
           <div class="customer">
             Customer:
             ${escapeHtml(group.customerName)}
@@ -1204,7 +1201,7 @@ export default function OrdersPage() {
             <tr>
 
               <td>
-                Items Calculated Total
+                Total
               </td>
 
               <td class="right">
@@ -1226,9 +1223,9 @@ export default function OrdersPage() {
 
           <h3 class="dox">
             بسم اللہ آئرن سٹور
-            <br />
+            
             جمالپور نزد ماہر والا پٹرول پمپ
-            <br />
+            
             قائم پور روڈ
           </h3>
 

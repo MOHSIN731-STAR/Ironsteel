@@ -431,7 +431,7 @@ export default function Cart() {
                 </div>
               </div>
 
-              <h3 className="text-center text-3xl font-bold ">
+              <h3 className="text-center text-xl font-bold ">
                 بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
               </h3>
             </div>
