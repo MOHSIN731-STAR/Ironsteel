@@ -1028,7 +1028,7 @@ const handlePrint = (group: GroupedOrder) => {
         ) || 0;
 
       // Database wali item date
-      const itemDate = item.entryDate ?? item.createdAt;
+      const itemDate = item.createdAt;
 
       const formattedItemDate = itemDate
         ? new Date(itemDate).toLocaleDateString()
@@ -1177,7 +1177,7 @@ const handlePrint = (group: GroupedOrder) => {
       <body>
 
         <div class="customer">
-          Name:
+          Customer:
           ${escapeHtml(group.customerName)}
         </div>
 
@@ -1267,7 +1267,6 @@ const handlePrint = (group: GroupedOrder) => {
 
   printWindow.document.close();
 };
-
   // ==========================================================
   // CLEAR DATES
   // ==========================================================
