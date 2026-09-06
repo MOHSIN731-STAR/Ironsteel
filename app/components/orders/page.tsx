@@ -1010,250 +1010,263 @@ export default function OrdersPage() {
   // PRINT
   // ==========================================================
 
-  const handlePrint = (group: GroupedOrder) => {
-    const escapeHtml = (value: any) => {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    };
-
-    const itemsRows = group.items
-      .map((item) => {
-        const itemTotal =
-          Number(
-            item.total ?? Number(item.price) * Number(item.quantity)
-          ) || 0;
-
-        return `
-            <tr>
-              <td>
-                ${escapeHtml(item.name)}
-              </td>
-
-              <td>
-                ${Number(item.price).toLocaleString()}
-              </td>
-
-              <td>
-                ${Number(item.quantity).toLocaleString()}
-              </td>
-
-              <td>
-                ${itemTotal.toLocaleString()}
-              </td>
-            </tr>
-          `;
-      })
-      .join("");
-
-    const itemsCalculatedTotal = Number(group.itemsCalculatedTotal) || 0;
-
-    const printWindow = window.open("", "_blank", "width=400,height=700");
-
-    if (!printWindow) {
-      alert("Please allow popup to print");
-      return;
-    }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-
-      <html>
-
-        <head>
-
-          <title>
-            Customer Order
-          </title>
-
-          <style>
-
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
-
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              margin: 0;
-              padding: 5mm;
-              width: 80mm;
-              font-family: Arial, sans-serif;
-              font-size: 12px;
-              font-weight: bold;
-              color: #000;
-            }
-
-            .center {
-              text-align: center;
-            }
-
-            .title {
-              font-size: 20px;
-              font-weight: bold;
-              margin-bottom: 4px;
-            }
-
-            .line {
-              border-top: 1px solid #000;
-              margin: 8px 0;
-            }
-
-            .customer {
-              font-size: 15px;
-              font-weight: bold;
-              margin: 8px 0;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              font-weight: bold;
-              font-size: 12px;
-            }
-
-            th,
-            td {
-              padding: 4px 2px;
-              border-bottom: 1px solid #999;
-              text-align: left;
-            }
-
-            th {
-              font-size: 11px;
-              font-weight: bold;
-            }
-
-            .right {
-              text-align: right;
-              font-weight: bold;
-              font-size: 16px;
-            }
-
-            .footer {
-              margin-top: 10px;
-              font-size: 11px;
-            }
-
-            .signature {
-              margin-top: 10px;
-              text-align: left;
-              font-size: 12px;
-            }
-
-            .dox {
-              font-size: 12px;
-              text-align: center;
-              line-height: 1.5;
-              margin-top: 15px;
-            }
-
-          </style>
-
-        </head>
-
-        <body>
-
-          
-
-          
-          <div class="customer">
-            Customer:
-            ${escapeHtml(group.customerName)}
-          </div>
-
-          <div>
-            Date:
-            ${new Date(group.createdAt).toLocaleString()}
-          </div>
-
-          <div class="line"></div>
-
-          <table>
-
-            <thead>
-
-              <tr>
-                <th>Item</th>
-                <th>Price</th>
-                <th>Qty</th>
-                <th>Total</th>
-              </tr>
-
-            </thead>
-
-            <tbody>
-              ${itemsRows}
-            </tbody>
-
-          </table>
-
-          <div class="line"></div>
-
-          <table>
-
-            <tr>
-
-              <td>
-                Total
-              </td>
-
-              <td class="right">
-                Rs
-                ${itemsCalculatedTotal.toLocaleString()}
-              </td>
-
-            </tr>
-
-          </table>
-
-          <div class="footer">
-
-            <div class="signature">
-              Sign ___________
-            </div>
-
-          </div>
-
-          <h3 class="dox">
-            بسم اللہ آئرن سٹور
-            
-            جمالپور نزد ماہر والا پٹرول پمپ
-            
-            قائم پور روڈ
-          </h3>
-
-          <script>
-
-            window.onload =
-              function () {
-
-                window.print();
-
-                setTimeout(
-                  function () {
-                    window.close();
-                  },
-                  500
-                );
-
-              };
-
-          </script>
-
-        </body>
-
-      </html>
-    `);
-
-    printWindow.document.close();
+const handlePrint = (group: GroupedOrder) => {
+  const escapeHtml = (value: any) => {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   };
+
+  const itemsRows = group.items
+    .map((item) => {
+      const itemTotal =
+        Number(
+          item.total ?? Number(item.price) * Number(item.quantity)
+        ) || 0;
+
+      // Database wali item date
+      const itemDate = item.entryDate ?? item.createdAt;
+
+      const formattedItemDate = itemDate
+        ? new Date(itemDate).toLocaleDateString()
+        : "";
+
+      return `
+        <tr>
+          <td>
+            ${escapeHtml(formattedItemDate)}
+          </td>
+
+          <td>
+            ${escapeHtml(item.name)}
+          </td>
+
+          <td>
+            ${Number(item.price).toLocaleString()}
+          </td>
+
+          <td>
+            ${Number(item.quantity).toLocaleString()}
+          </td>
+
+          <td>
+            ${itemTotal.toLocaleString()}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const itemsCalculatedTotal =
+    Number(group.itemsCalculatedTotal) || 0;
+
+  const printWindow = window.open(
+    "",
+    "_blank",
+    "width=400,height=700"
+  );
+
+  if (!printWindow) {
+    alert("Please allow popup to print");
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+
+    <html>
+
+      <head>
+
+        <title>
+          Customer Order
+        </title>
+
+        <style>
+
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            padding: 5mm;
+            width: 80mm;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            color: #000;
+          }
+
+          .center {
+            text-align: center;
+          }
+
+          .title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 4px;
+          }
+
+          .line {
+            border-top: 1px solid #000;
+            margin: 8px 0;
+          }
+
+          .customer {
+            font-size: 15px;
+            font-weight: bold;
+            margin: 8px 0;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-weight: bold;
+            font-size: 12px;
+          }
+
+          th,
+          td {
+            padding: 4px 2px;
+            border-bottom: 1px solid #999;
+            text-align: left;
+          }
+
+          th {
+            font-size: 11px;
+            font-weight: bold;
+          }
+
+          .right {
+            text-align: right;
+            font-weight: bold;
+            font-size: 16px;
+          }
+
+          .footer {
+            margin-top: 10px;
+            font-size: 11px;
+          }
+
+          .signature {
+            margin-top: 10px;
+            text-align: left;
+            font-size: 12px;
+          }
+
+          .dox {
+            font-size: 12px;
+            text-align: center;
+            line-height: 1.5;
+            margin-top: 15px;
+          }
+
+        </style>
+
+      </head>
+
+      <body>
+
+        <div class="customer">
+          Name:
+          ${escapeHtml(group.customerName)}
+        </div>
+
+        <div>
+          Date:
+          ${new Date(group.createdAt).toLocaleString()}
+        </div>
+
+        <div class="line"></div>
+
+        <table>
+
+          <thead>
+
+            <tr>
+              <th>Date</th>
+              <th>Item</th>
+              <th>Price</th>
+              <th>Qty</th>
+              <th>Total</th>
+            </tr>
+
+          </thead>
+
+          <tbody>
+            ${itemsRows}
+          </tbody>
+
+        </table>
+
+        <div class="line"></div>
+
+        <table>
+
+          <tr>
+
+            <td>
+              Total
+            </td>
+
+            <td class="right">
+              Rs
+              ${itemsCalculatedTotal.toLocaleString()}
+            </td>
+
+          </tr>
+
+        </table>
+
+        <div class="footer">
+
+          <div class="signature">
+            Sign ___________
+          </div>
+
+        </div>
+
+        <h3 class="dox">
+          بسم اللہ آئرن سٹور
+
+          جمالپور نزد ماہر والا پٹرول پمپ
+
+          قائم پور روڈ
+        </h3>
+
+        <script>
+
+          window.onload = function () {
+
+            window.print();
+
+            setTimeout(
+              function () {
+                window.close();
+              },
+              500
+            );
+
+          };
+
+        </script>
+
+      </body>
+
+    </html>
+  `);
+
+  printWindow.document.close();
+};
 
   // ==========================================================
   // CLEAR DATES
