@@ -2,39 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-interface Product {
-  id: number;
-  name: string;
-  image: string;
-}
-
-const products: Product[] = [
-  { id: 1, name: "DGسیمنٹ", image: "/DGسیمنٹ.png" },
-  { id: 2, name: "پاکستان سیمنٹ", image: "/pk.png" },
-  { id: 3, name: "70×70 ٹی یار", image: "/70×70 ٹی یار.png" },
-  { id: 4, name: "75×75 ٹی یار", image: "/70×70 ٹی یار.png" },
-  { id: 5, name: "گاڈرمغل", image: "/گاڈرمغل.png" },
-  { id: 6, name: "شاپر", image: "/shapper.jpeg" },
-  { id: 7, name: "ٹائل 10انچ والی", image: "/ٹائل 10انچ والی.png" },
-  { id: 8, name: "ٹائل فٹ والی", image: "/ٹائل فٹ والی.png" },
-  { id: 9, name: "سریا Azmat Gold", image: "/سپریم سریا.png" },
-  { id: 10, name: "MOIZ سریا", image: "/سپریم سریا.png" },
-  { id: 11, name: "تار", image: "/tar.png" },
-  { id: 12, name: "پانی پائپ", image: "/watarpip.png" },
-  { id: 13, name: "بالٹی", image: "/bati.jpeg" },
-  { id: 14, name: "ڈبہ", image: "/daba.jpeg" },
-  { id: 15, name: "موٹی بجری", image: "/motibajri.jpeg" },
-  { id: 16, name: "باریک بجری", image: "/barikbajri.jpeg" },
-  { id: 17, name: "پلاسٹک دروازہ", image: "/door.png" },
-  { id: 18, name: "فوم", image: "/foam.png" },
-  { id: 19, name: "رینگ", image: "/RING.png" },
-  { id: 20, name: "white cement", image: "/white_cement.jpg" },
-  { id: 21, name: "جالی ریت", image: "/jali.jpg" },
-  { id: 22, name: "بلیڈ", image: "/blades.webp" },
-  { id: 23, name: "تار برش", image: "/barish.png" },
-  { id: 24, name: "لوہا بھٹل", image: "/lohe_batil.png" },
-  { id: 25, name: "پلاسٹک بھٹل", image: "/plastic_batil.png" },
-];
+import { products } from "../../types/product";
+import Link from "next/link";
 
 interface Stocks {
   [key: number]: number;
@@ -44,6 +13,10 @@ export default function StockInput() {
   const [stocks, setStocks] = useState<Stocks>({});
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Save button states
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   /* ---------------- LOGIN CHECK ---------------- */
 
@@ -68,60 +41,73 @@ export default function StockInput() {
     checkLogin();
   }, []);
 
-  /* ---------------- STOCK LOAD ---------------- */
+  /* ---------------- DATABASE STOCK LOAD ---------------- */
 
   useEffect(() => {
-    const loadStocks = () => {
-      let savedStocks: Stocks = {};
+    const loadStocks = async () => {
+      try {
+        const response = await fetch("/api/product-stock", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
 
-      const saved = localStorage.getItem("productStocks");
-
-      if (saved) {
-        try {
-          savedStocks = JSON.parse(saved);
-        } catch (error) {
-          console.error("Invalid stock data");
-          savedStocks = {};
+        if (!response.ok) {
+          throw new Error("Failed to load stocks");
         }
-      }
 
-      /*
-       * Automatically register every product.
-       * Existing stock will NOT be changed.
-       * New product gets stock = 0.
-       */
+        const data = await response.json();
 
-      let changed = false;
+        const stockMap: Stocks = {};
 
-      products.forEach((product) => {
-        if (savedStocks[product.id] === undefined) {
-          savedStocks[product.id] = 0;
-          changed = true;
-        }
-      });
+        /*
+         * Sab products ka default stock 0
+         */
+        products.forEach((product) => {
+          stockMap[product.id] = 0;
+        });
 
-      if (changed) {
-        localStorage.setItem(
-          "productStocks",
-          JSON.stringify(savedStocks)
+        /*
+         * PostgreSQL se stock
+         */
+        data.forEach(
+          (item: {
+            productId: number;
+            stock: number;
+          }) => {
+            stockMap[item.productId] = Number(
+              item.stock
+            );
+          }
         );
-      }
 
-      setStocks(savedStocks);
+        setStocks(stockMap);
+      } catch (error) {
+        console.error("Stock load error:", error);
+
+        /*
+         * API fail hone par
+         * default stock 0
+         */
+        const defaultStocks: Stocks = {};
+
+        products.forEach((product) => {
+          defaultStocks[product.id] = 0;
+        });
+
+        setStocks(defaultStocks);
+      }
     };
 
     // Initial load
     loadStocks();
 
-    // Same tab update
+    /*
+     * Products page ya kisi aur component
+     * se stock update hone par reload
+     */
     window.addEventListener(
       "stockUpdated",
-      loadStocks
-    );
-
-    // Other tab update
-    window.addEventListener(
-      "storage",
       loadStocks
     );
 
@@ -130,21 +116,15 @@ export default function StockInput() {
         "stockUpdated",
         loadStocks
       );
-
-      window.removeEventListener(
-        "storage",
-        loadStocks
-      );
     };
   }, []);
 
-  /* ---------------- STOCK CHANGE ---------------- */
+  /* ---------------- STOCK INPUT CHANGE ---------------- */
 
   const handleStockChange = (
     productId: number,
     value: string
   ) => {
-    // Login nahi hai to update nahi hoga
     if (!isLoggedIn) {
       return;
     }
@@ -152,22 +132,107 @@ export default function StockInput() {
     const newStock =
       value === "" ? 0 : Number(value);
 
-    const updatedStocks = {
-      ...stocks,
+    /*
+     * Invalid number
+     */
+    if (Number.isNaN(newStock)) {
+      return;
+    }
+
+    /*
+     * Negative stock allowed nahi
+     */
+    if (newStock < 0) {
+      return;
+    }
+
+    /*
+     * Sirf state update hoga.
+     *
+     * Database mein abhi save nahi hoga.
+     * Database mein Save All button par save hoga.
+     */
+    setStocks((prev) => ({
+      ...prev,
       [productId]: newStock,
-    };
+    }));
 
-    setStocks(updatedStocks);
+    // Purana saved message remove
+    setSaved(false);
+  };
 
-    localStorage.setItem(
-      "productStocks",
-      JSON.stringify(updatedStocks)
-    );
+  /* ---------------- SAVE ALL STOCKS ---------------- */
 
-    // Products page ko update karne ke liye
-    window.dispatchEvent(
-      new Event("stockUpdated")
-    );
+  const handleSaveAllStocks = async () => {
+    if (!isLoggedIn) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setSaved(false);
+
+      /*
+       * Sab products ko PostgreSQL mein save/update karein
+       */
+      await Promise.all(
+        products.map(async (product) => {
+          const stock =
+            stocks[product.id] ?? 0;
+
+          const response = await fetch(
+            "/api/product-stock",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+              body: JSON.stringify({
+                productId: product.id,
+                stock,
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to save ${product.name}`
+            );
+          }
+        })
+      );
+
+      /*
+       * Save successful
+       */
+      setSaved(true);
+
+      /*
+       * Products page ko notify
+       */
+      window.dispatchEvent(
+        new Event("stockUpdated")
+      );
+
+      /*
+       * 2 seconds baad message hide
+       */
+      setTimeout(() => {
+        setSaved(false);
+      }, 2000);
+    } catch (error) {
+      console.error(
+        "Save all stocks error:",
+        error
+      );
+
+      alert(
+        "Stock save nahi ho saka. Dobara try karein."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* ---------------- LOADING ---------------- */
@@ -186,9 +251,10 @@ export default function StockInput() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
+
       <div className="max-w-5xl mx-auto">
 
-        {/* HEADER */}
+        {/* ---------------- HEADER ---------------- */}
 
         <div className="bg-white rounded-2xl shadow-md p-5 mb-6">
 
@@ -199,12 +265,19 @@ export default function StockInput() {
           <p className="text-sm text-gray-500 mt-1">
             Yahan se product ka stock update karein.
           </p>
+          <Link href="/components/StationaryStockInput" className="text-blue-500 hover:underline">
+            Stationary Stock input
+          </Link>
+
+          {/* NOT LOGGED IN */}
 
           {!isLoggedIn && (
             <div className="mt-4 bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm font-medium">
               🔒 Stock enter karne ke liye pehle login karein.
             </div>
           )}
+
+          {/* LOGGED IN */}
 
           {isLoggedIn && (
             <div className="mt-4 bg-green-50 border border-green-200 text-green-600 rounded-lg px-4 py-3 text-sm font-medium">
@@ -214,7 +287,7 @@ export default function StockInput() {
 
         </div>
 
-        {/* PRODUCTS */}
+        {/* ---------------- PRODUCTS ---------------- */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
@@ -235,15 +308,15 @@ export default function StockInput() {
                     src={product.image}
                     alt={product.name}
                     className="w-full h-full object-contain"
-                    width={20}
-                    height={20}
+                    width={80}
+                    height={80}
                   />
 
                 </div>
 
                 {/* PRODUCT NAME + INPUT */}
 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
 
                   <h2 className="font-semibold text-gray-800 text-sm mb-2">
                     {product.name}
@@ -252,7 +325,10 @@ export default function StockInput() {
                   <input
                     type="number"
                     min="0"
-                    value={stocks[product.id] ?? 0}
+                    step="any"
+                    value={
+                      stocks[product.id] ?? 0
+                    }
                     disabled={!isLoggedIn}
                     onChange={(e) =>
                       handleStockChange(
@@ -290,7 +366,49 @@ export default function StockInput() {
 
         </div>
 
+        {/* ---------------- ONE SAVE BUTTON ---------------- */}
+
+        <div className="mt-6 flex justify-center">
+
+          <button
+            type="button"
+            disabled={!isLoggedIn || saving}
+            onClick={handleSaveAllStocks}
+            className={`
+              w-full
+              sm:w-auto
+              min-w-[220px]
+              px-8
+              py-3
+              rounded-xl
+              font-bold
+              text-white
+              shadow-md
+              transition
+              ${
+                !isLoggedIn
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : saving
+                  ? "bg-blue-400 cursor-wait"
+                  : saved
+                  ? "bg-green-600"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }
+            `}
+          >
+
+            {saving
+              ? "Saving All Stocks..."
+              : saved
+              ? "✓ All Stocks Saved"
+              : "Save All Stock"}
+
+          </button>
+
+        </div>
+
       </div>
+
     </div>
   );
 }

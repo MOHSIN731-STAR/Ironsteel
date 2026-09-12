@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,7 +6,7 @@ import { useCart } from "./../context/CartContext";
 import Image from "next/image";
 import Link from "next/link";
 import { printBillFromElement } from "../lib/printBill";
-import Calculator from "./../components/Calculator";
+import Calculator from "../components/Calculator";
 
 type PriceMap = Record<number, number>;
 
@@ -20,8 +19,10 @@ export default function Cart() {
 
   const [customerName, setCustomerName] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [customerType, setCustomerType] = useState("walking");
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<any>(null);
+  const [customerType, setCustomerType] =
+    useState("walking");
   const [showPrint, setShowPrint] = useState(false);
   const [prices, setPrices] = useState<PriceMap>({});
   const [stocks, setStocks] = useState<Stocks>({});
@@ -44,25 +45,56 @@ export default function Cart() {
 
   const getCartTotal = () => {
     return cart.reduce((sum, item) => {
-      return sum + getPrice(item) * item.quantity;
+      return (
+        sum +
+        getPrice(item) * item.quantity
+      );
     }, 0);
   };
 
   /* ---------------- LOAD STOCK ---------------- */
 
   useEffect(() => {
-    const loadStocks = () => {
-      const savedStocks = localStorage.getItem("productStocks");
+    const loadStocks = async () => {
+      try {
+        const res = await fetch(
+          "/api/product-stock",
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
-      if (savedStocks) {
-        try {
-          const parsedStocks = JSON.parse(savedStocks);
-          setStocks(parsedStocks);
-        } catch (error) {
-          console.error("Invalid stock data:", error);
-          setStocks({});
+        if (!res.ok) {
+          throw new Error(
+            "Failed to load stock"
+          );
         }
-      } else {
+
+        const data = await res.json();
+
+        const stockMap: Stocks = {};
+
+        if (Array.isArray(data)) {
+          data.forEach(
+            (item: {
+              productId: number;
+              stock: number;
+            }) => {
+              stockMap[item.productId] =
+                Number(item.stock);
+            }
+          );
+        }
+
+        setStocks(stockMap);
+      } catch (error) {
+        console.error(
+          "Stock loading error:",
+          error
+        );
+
         setStocks({});
       }
     };
@@ -70,14 +102,20 @@ export default function Cart() {
     loadStocks();
 
     // Same tab stock update
-    window.addEventListener("stockUpdated", loadStocks);
+    const handleStockUpdated = () => {
+      loadStocks();
+    };
 
-    // Other tab stock update
-    window.addEventListener("storage", loadStocks);
+    window.addEventListener(
+      "stockUpdated",
+      handleStockUpdated
+    );
 
     return () => {
-      window.removeEventListener("stockUpdated", loadStocks);
-      window.removeEventListener("storage", loadStocks);
+      window.removeEventListener(
+        "stockUpdated",
+        handleStockUpdated
+      );
     };
   }, []);
 
@@ -89,11 +127,16 @@ export default function Cart() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch("/api/customers");
+      const res = await fetch(
+        "/api/customers"
+      );
 
       const data = await res.json();
 
-      if (data?.success && Array.isArray(data?.data)) {
+      if (
+        data?.success &&
+        Array.isArray(data?.data)
+      ) {
         setCustomers(data.data);
       } else {
         setCustomers([]);
@@ -107,7 +150,9 @@ export default function Cart() {
   /* ---------------- GET PRODUCT STOCK ---------------- */
 
   const getStock = (productId: number) => {
-    return Number(stocks[productId] ?? 0);
+    return Number(
+      stocks[productId] ?? 0
+    );
   };
 
   /* ---------------- CHANGE QUANTITY ---------------- */
@@ -136,25 +181,33 @@ export default function Cart() {
       );
     }
 
-    updateQuantity(item.id, quantity);
+    updateQuantity(
+      item.id,
+      quantity
+    );
   };
 
   /* ---------------- CHECK STOCK BEFORE CHECKOUT ---------------- */
 
   const checkStockBeforeCheckout = () => {
     for (const item of cart) {
-      const availableStock = getStock(item.id);
+      const availableStock =
+        getStock(item.id);
 
       if (item.quantity <= 0) {
         alert(
           `Please enter quantity for ${item.name}`
         );
+
         return false;
       }
 
-      if (item.quantity > availableStock) {
+      if (
+        item.quantity >
+        availableStock
+      ) {
         alert(
-          `${item.name}\n\nAvailable Stock: ${availableStock}\nRequested Quantity: ${item.quantity}`
+          `Only ${availableStock} stock available for ${item.name}`
         );
 
         return false;
@@ -166,52 +219,96 @@ export default function Cart() {
 
   /* ---------------- REDUCE STOCK ---------------- */
 
-  const reduceStockAfterSale = () => {
-    const savedStocks =
-      localStorage.getItem("productStocks");
+  const reduceStockAfterSale = async () => {
+    try {
+      const updatedStocks: Stocks = {
+        ...stocks,
+      };
 
-    let currentStocks: Stocks = {};
-
-    if (savedStocks) {
-      try {
-        currentStocks = JSON.parse(savedStocks);
-      } catch (error) {
-        console.error(
-          "Could not read stock data:",
-          error
+      for (const item of cart) {
+        const currentStock = Number(
+          updatedStocks[item.id] ?? 0
         );
-        currentStocks = {};
+
+        const soldQuantity = Number(
+          item.quantity ?? 0
+        );
+
+        if (
+          soldQuantity >
+          currentStock
+        ) {
+          alert(
+            `Only ${currentStock} stock available for ${item.name}`
+          );
+
+          return false;
+        }
+
+        /*
+          Example:
+
+          Current Stock = 120
+          Sold Quantity = 20
+
+          Remaining Stock = 100
+        */
+
+        const remainingStock =
+          currentStock -
+          soldQuantity;
+
+        updatedStocks[item.id] =
+          remainingStock;
+
+        /* -------- SAVE STOCK TO POSTGRESQL -------- */
+
+        const response =
+          await fetch(
+            "/api/product-stock",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              credentials: "include",
+
+              body: JSON.stringify({
+                productId: item.id,
+                stock: remainingStock,
+              }),
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to update stock for ${item.name}`
+          );
+        }
       }
+
+      /* -------- UPDATE CURRENT STATE -------- */
+
+      setStocks(updatedStocks);
+
+      /* -------- NOTIFY OTHER COMPONENTS -------- */
+
+      window.dispatchEvent(
+        new Event("stockUpdated")
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Stock update error:",
+        error
+      );
+
+      return false;
     }
-
-    cart.forEach((item) => {
-      const currentStock = Number(
-        currentStocks[item.id] ?? 0
-      );
-
-      const soldQuantity = Number(
-        item.quantity ?? 0
-      );
-
-      const remainingStock = Math.max(
-        0,
-        currentStock - soldQuantity
-      );
-
-      currentStocks[item.id] = remainingStock;
-    });
-
-    localStorage.setItem(
-      "productStocks",
-      JSON.stringify(currentStocks)
-    );
-
-    setStocks(currentStocks);
-
-    // Notify Products page / other components
-    window.dispatchEvent(
-      new Event("stockUpdated")
-    );
   };
 
   /* ---------------- CHECKOUT ---------------- */
@@ -223,20 +320,28 @@ export default function Cart() {
       /* ---------- CUSTOMER CHECK ---------- */
 
       if (
-        customerType === "regular" &&
+        customerType ===
+          "regular" &&
         !selectedCustomer
       ) {
-        alert("Please select customer");
+        alert(
+          "Please select customer"
+        );
+
         return false;
       }
 
       if (!customerName.trim()) {
-        alert("Please enter customer name");
+        alert(
+          "Please enter customer name"
+        );
+
         return false;
       }
 
       if (!cart.length) {
         alert("Cart is empty");
+
         return false;
       }
 
@@ -256,45 +361,76 @@ export default function Cart() {
           ? "/api/orders"
           : "/api/walking";
 
-      const response = await fetch(apiUrl, {
-        method: "POST",
+      const response = await fetch(
+        apiUrl,
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-        },
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-        body: JSON.stringify({
-          customer:
-            customerType === "regular"
-              ? selectedCustomer?.id
-              : null,
+          body: JSON.stringify({
+            customer:
+              customerType ===
+              "regular"
+                ? selectedCustomer?.id
+                : null,
 
-          customerName,
+            customerName,
 
-          items: cart.map((item) => ({
-            name: item.name,
+            items: cart.map(
+              (item) => ({
+                name: item.name,
 
-            price: getPrice(item),
+                price: getPrice(item),
 
-            quantity: item.quantity,
+                quantity:
+                  item.quantity,
+
+                total:
+                  getPrice(item) *
+                  item.quantity,
+              })
+            ),
 
             total:
-              getPrice(item) *
-              item.quantity,
-          })),
+              getCartTotal(),
+          }),
+        }
+      );
 
-          total: getCartTotal(),
-        }),
-      });
-
-      const data = await response.json();
+      const data =
+        await response.json();
 
       /* ---------- SUCCESS ---------- */
 
       if (response.ok) {
-        // IMPORTANT:
-        // Stock is reduced ONLY after successful order
-        reduceStockAfterSale();
+        /*
+          IMPORTANT:
+
+          Order successfully saved
+          FIRST.
+
+          Then stock is reduced.
+
+          Example:
+          120 - 20 = 100
+        */
+
+        const stockUpdated =
+          await reduceStockAfterSale();
+
+        if (!stockUpdated) {
+          alert(
+            "Order save ho gaya, lekin stock update nahi ho saka ❌"
+          );
+
+          return false;
+        }
+
+        /* ---------- PRINT ---------- */
 
         if (shouldPrint) {
           setShowPrint(true);
@@ -451,18 +587,7 @@ export default function Cart() {
 
                     {/* STOCK */}
 
-                    <p
-                      className={`font-bold mt-2 ${
-                        availableStock > 0
-                          ? "text-blue-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      Available Stock:{" "}
-                      {availableStock}
-                    </p>
-
-                    {/* QUANTITY */}
+                    {/* ---------------- QUANTITY ---------------- */}
 
                     <div className="flex gap-4 mt-3 items-center">
 
@@ -533,7 +658,9 @@ export default function Cart() {
                       null
                     );
 
-                    setCustomerName("");
+                    setCustomerName(
+                      ""
+                    );
                   }}
                   className={`px-4 py-2 rounded ${
                     customerType ===
@@ -551,7 +678,9 @@ export default function Cart() {
                       "regular"
                     );
 
-                    setCustomerName("");
+                    setCustomerName(
+                      ""
+                    );
                   }}
                   className={`px-4 py-2 rounded ${
                     customerType ===
@@ -596,12 +725,15 @@ export default function Cart() {
                     const customer =
                       customers.find(
                         (c: any) =>
-                          String(c.id) ===
+                          String(
+                            c.id
+                          ) ===
                           e.target.value
                       );
 
                     setSelectedCustomer(
-                      customer || null
+                      customer ||
+                        null
                     );
 
                     setCustomerName(
@@ -711,7 +843,9 @@ export default function Cart() {
             {/* PRINT BILL */}
 
             <button
-              onClick={handlePrintBill}
+              onClick={
+                handlePrintBill
+              }
               className="w-full bg-blue-600 text-white py-3 mt-2"
             >
               Print Bill
@@ -879,4 +1013,3 @@ export default function Cart() {
     </>
   );
 }
-

@@ -110,3 +110,10 @@ model WalkingItem {
   quantity Float?
   total    Float?
 }
+model ProductStock {
+  id        Int      @id @default(autoincrement())
+  productId Int      @unique
+  stock     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
