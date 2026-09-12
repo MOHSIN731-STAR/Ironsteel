@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,6 +6,7 @@ import ProductCard from "./../components/ProductCard";
 import { Product } from "./../types/product";
 import { useRouter } from "next/navigation";
 import Calculator from "./../components/Calculator";
+
 const products: Product[] = [
   { id: 1, name: "DGسیمنٹ", image: "/DGسیمنٹ.png" },
   { id: 2, name: "پاکستان سیمنٹ", image: "/pk.png" },
@@ -14,7 +16,7 @@ const products: Product[] = [
   { id: 6, name: "شاپر", image: "/shapper.jpeg" },
   { id: 7, name: "ٹائل 10انچ والی", image: "/ٹائل 10انچ والی.png" },
   { id: 8, name: "ٹائل فٹ والی", image: "/ٹائل فٹ والی.png" },
-  { id: 9, name: "سریا Azmat Gold ", image: "/سپریم سریا.png" },
+  { id: 9, name: "سریا Azmat Gold", image: "/سپریم سریا.png" },
   { id: 10, name: "MOIZ سریا", image: "/سپریم سریا.png" },
   { id: 11, name: "تار", image: "/tar.png" },
   { id: 12, name: "پانی پائپ", image: "/watarpip.png" },
@@ -33,10 +35,18 @@ const products: Product[] = [
   { id: 25, name: "پلاسٹک بھٹل", image: "/plastic_batil.png" },
 ];
 
+interface Stocks {
+  [key: number]: number;
+}
+
 export default function Products() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [stocks, setStocks] = useState<Stocks>({});
+
   const router = useRouter();
+
+  /* ---------------- LOGIN CHECK ---------------- */
 
   useEffect(() => {
     const checkLogin = async () => {
@@ -57,37 +67,151 @@ export default function Products() {
     checkLogin();
   }, []);
 
-  const handleProductClick = (product: Product) => {
+  /* ---------------- STOCK LOAD + PRODUCT REGISTER ---------------- */
+
+  useEffect(() => {
+    const loadStocks = () => {
+      let savedStocks: Stocks = {};
+
+      const saved = localStorage.getItem("productStocks");
+
+      if (saved) {
+        try {
+          savedStocks = JSON.parse(saved);
+        } catch (error) {
+          console.error("Invalid stock data");
+          savedStocks = {};
+        }
+      }
+
+      /*
+       * Automatically register every product.
+       *
+       * Existing stock will NOT be changed.
+       * New product gets stock = 0.
+       */
+
+      let changed = false;
+
+      products.forEach((product) => {
+        if (
+          savedStocks[product.id] === undefined
+        ) {
+          savedStocks[product.id] = 0;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem(
+          "productStocks",
+          JSON.stringify(savedStocks)
+        );
+      }
+
+      setStocks(savedStocks);
+    };
+
+    // Initial load
+    loadStocks();
+
+    // Same tab update
+    window.addEventListener(
+      "stockUpdated",
+      loadStocks
+    );
+
+    // Other tab update
+    window.addEventListener(
+      "storage",
+      loadStocks
+    );
+
+    return () => {
+      window.removeEventListener(
+        "stockUpdated",
+        loadStocks
+      );
+
+      window.removeEventListener(
+        "storage",
+        loadStocks
+      );
+    };
+  }, []);
+
+  /* ---------------- PRODUCT CLICK ---------------- */
+
+  const handleProductClick = (
+    product: Product
+  ) => {
     if (!isLoggedIn) {
-      
       router.push("/components/login");
       return;
     }
 
-    // Login hai to yahan product ka action
-    console.log("Product clicked:", product);
+    console.log(
+      "Product clicked:",
+      product
+    );
   };
 
+  /* ---------------- LOADING ---------------- */
+
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        Loading...
+      </div>
+    );
   }
+
+  /* ---------------- UI ---------------- */
 
   return (
     <div>
+
       <Calculator />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+
         {products.map((product) => (
+
           <div
             key={product.id}
-            onClick={() => handleProductClick(product)}
+            onClick={() =>
+              handleProductClick(product)
+            }
             className="cursor-pointer"
           >
-            <ProductCard product={product} />
+
+            <div className="relative">
+
+              {/* STOCK */}
+
+              <div
+                className={`absolute top-2 right-2 z-20 px-3 py-1 rounded-full text-xs font-bold shadow-md ${
+                  (stocks[product.id] ?? 0) > 0
+                    ? "bg-green-600 text-white"
+                    : "bg-red-600 text-white"
+                }`}
+              >
+                Stock:{" "}
+                {stocks[product.id] ?? 0}
+              </div>
+
+              <ProductCard
+                product={product}
+              />
+
+            </div>
+
           </div>
+
         ))}
+
       </div>
+
     </div>
   );
 }
-

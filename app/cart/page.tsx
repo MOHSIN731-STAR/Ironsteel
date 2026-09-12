@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,6 +11,10 @@ import Calculator from "./../components/Calculator";
 
 type PriceMap = Record<number, number>;
 
+interface Stocks {
+  [key: number]: number;
+}
+
 export default function Cart() {
   /* ---------------- STATES ---------------- */
 
@@ -19,7 +24,7 @@ export default function Cart() {
   const [customerType, setCustomerType] = useState("walking");
   const [showPrint, setShowPrint] = useState(false);
   const [prices, setPrices] = useState<PriceMap>({});
-  
+  const [stocks, setStocks] = useState<Stocks>({});
 
   /* ---------------- CART ---------------- */
 
@@ -35,6 +40,47 @@ export default function Cart() {
     return prices[item.id] ?? item.price ?? 0;
   };
 
+  /* ---------------- TOTAL HELPER ---------------- */
+
+  const getCartTotal = () => {
+    return cart.reduce((sum, item) => {
+      return sum + getPrice(item) * item.quantity;
+    }, 0);
+  };
+
+  /* ---------------- LOAD STOCK ---------------- */
+
+  useEffect(() => {
+    const loadStocks = () => {
+      const savedStocks = localStorage.getItem("productStocks");
+
+      if (savedStocks) {
+        try {
+          const parsedStocks = JSON.parse(savedStocks);
+          setStocks(parsedStocks);
+        } catch (error) {
+          console.error("Invalid stock data:", error);
+          setStocks({});
+        }
+      } else {
+        setStocks({});
+      }
+    };
+
+    loadStocks();
+
+    // Same tab stock update
+    window.addEventListener("stockUpdated", loadStocks);
+
+    // Other tab stock update
+    window.addEventListener("storage", loadStocks);
+
+    return () => {
+      window.removeEventListener("stockUpdated", loadStocks);
+      window.removeEventListener("storage", loadStocks);
+    };
+  }, []);
+
   /* ---------------- FETCH CUSTOMERS ---------------- */
 
   useEffect(() => {
@@ -44,6 +90,7 @@ export default function Cart() {
   const fetchCustomers = async () => {
     try {
       const res = await fetch("/api/customers");
+
       const data = await res.json();
 
       if (data?.success && Array.isArray(data?.data)) {
@@ -57,24 +104,152 @@ export default function Cart() {
     }
   };
 
+  /* ---------------- GET PRODUCT STOCK ---------------- */
+
+  const getStock = (productId: number) => {
+    return Number(stocks[productId] ?? 0);
+  };
+
+  /* ---------------- CHANGE QUANTITY ---------------- */
+
+  const handleQuantityChange = (
+    item: any,
+    value: string
+  ) => {
+    const stock = getStock(item.id);
+
+    let quantity = Number(value);
+
+    if (Number.isNaN(quantity)) {
+      quantity = 0;
+    }
+
+    if (quantity < 0) {
+      quantity = 0;
+    }
+
+    if (quantity > stock) {
+      quantity = stock;
+
+      alert(
+        `Only ${stock} stock available for ${item.name}`
+      );
+    }
+
+    updateQuantity(item.id, quantity);
+  };
+
+  /* ---------------- CHECK STOCK BEFORE CHECKOUT ---------------- */
+
+  const checkStockBeforeCheckout = () => {
+    for (const item of cart) {
+      const availableStock = getStock(item.id);
+
+      if (item.quantity <= 0) {
+        alert(
+          `Please enter quantity for ${item.name}`
+        );
+        return false;
+      }
+
+      if (item.quantity > availableStock) {
+        alert(
+          `${item.name}\n\nAvailable Stock: ${availableStock}\nRequested Quantity: ${item.quantity}`
+        );
+
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  /* ---------------- REDUCE STOCK ---------------- */
+
+  const reduceStockAfterSale = () => {
+    const savedStocks =
+      localStorage.getItem("productStocks");
+
+    let currentStocks: Stocks = {};
+
+    if (savedStocks) {
+      try {
+        currentStocks = JSON.parse(savedStocks);
+      } catch (error) {
+        console.error(
+          "Could not read stock data:",
+          error
+        );
+        currentStocks = {};
+      }
+    }
+
+    cart.forEach((item) => {
+      const currentStock = Number(
+        currentStocks[item.id] ?? 0
+      );
+
+      const soldQuantity = Number(
+        item.quantity ?? 0
+      );
+
+      const remainingStock = Math.max(
+        0,
+        currentStock - soldQuantity
+      );
+
+      currentStocks[item.id] = remainingStock;
+    });
+
+    localStorage.setItem(
+      "productStocks",
+      JSON.stringify(currentStocks)
+    );
+
+    setStocks(currentStocks);
+
+    // Notify Products page / other components
+    window.dispatchEvent(
+      new Event("stockUpdated")
+    );
+  };
+
   /* ---------------- CHECKOUT ---------------- */
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (
+    shouldPrint = false
+  ) => {
     try {
-      if (customerType === "regular" && !selectedCustomer) {
+      /* ---------- CUSTOMER CHECK ---------- */
+
+      if (
+        customerType === "regular" &&
+        !selectedCustomer
+      ) {
         alert("Please select customer");
-        return;
+        return false;
       }
 
       if (!customerName.trim()) {
         alert("Please enter customer name");
-        return;
+        return false;
       }
 
       if (!cart.length) {
         alert("Cart is empty");
-        return;
+        return false;
       }
+
+      /* ---------- STOCK CHECK ---------- */
+
+      const stockAvailable =
+        checkStockBeforeCheckout();
+
+      if (!stockAvailable) {
+        return false;
+      }
+
+      /* ---------- API ---------- */
 
       const apiUrl =
         customerType === "regular"
@@ -83,7 +258,10 @@ export default function Cart() {
 
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+
+        headers: {
+          "Content-Type": "application/json",
+        },
 
         body: JSON.stringify({
           customer:
@@ -95,41 +273,78 @@ export default function Cart() {
 
           items: cart.map((item) => ({
             name: item.name,
+
             price: getPrice(item),
+
             quantity: item.quantity,
-            total: getPrice(item) * item.quantity,
+
+            total:
+              getPrice(item) *
+              item.quantity,
           })),
 
-          total: cart.reduce((sum, item) => {
-            return sum + getPrice(item) * item.quantity;
-          }, 0),
+          total: getCartTotal(),
         }),
       });
 
       const data = await response.json();
 
+      /* ---------- SUCCESS ---------- */
+
       if (response.ok) {
-        alert("Order Saved Successfully ✅");
-      } else {
-        alert(data?.message || "Failed ❌");
+        // IMPORTANT:
+        // Stock is reduced ONLY after successful order
+        reduceStockAfterSale();
+
+        if (shouldPrint) {
+          setShowPrint(true);
+
+          setTimeout(() => {
+            const printArea =
+              document.getElementById(
+                "print-area"
+              );
+
+            if (printArea) {
+              printBillFromElement(
+                printArea
+              );
+            }
+
+            setShowPrint(false);
+          }, 300);
+        }
+
+        alert(
+          "Order Saved Successfully ✅"
+        );
+
+        return true;
       }
+
+      /* ---------- API ERROR ---------- */
+
+      alert(
+        data?.message ||
+          "Failed to save order ❌"
+      );
+
+      return false;
     } catch (error) {
       console.error(error);
-      alert("Something went wrong ❌");
+
+      alert(
+        "Something went wrong ❌"
+      );
+
+      return false;
     }
   };
 
-  /* ---------------- PRINT ---------------- */
+  /* ---------------- PRINT BUTTON ---------------- */
 
-  const handlePrint = () => {
-    setShowPrint(true);
-    setTimeout(() => {
-      const printArea = document.getElementById("print-area");
-      if (printArea) {
-        printBillFromElement(printArea);
-      }
-      setShowPrint(false);
-    }, 300);
+  const handlePrintBill = async () => {
+    await handleCheckout(true);
   };
 
   /* ---------------- EMPTY CART ---------------- */
@@ -137,8 +352,16 @@ export default function Cart() {
   if (!cart.length) {
     return (
       <div className="text-center py-20">
-        <h1 className="text-3xl font-bold">Cart Empty</h1>
-        <Link href="/dashboard" className="text-3xl font-bold hover:text-blue-500 hover:underline">Products</Link>
+        <h1 className="text-3xl font-bold">
+          Cart Empty
+        </h1>
+
+        <Link
+          href="/dashboard"
+          className="text-3xl font-bold hover:text-blue-500 hover:underline"
+        >
+          Products
+        </Link>
       </div>
     );
   }
@@ -147,74 +370,147 @@ export default function Cart() {
 
   return (
     <>
-
       <div className="container mx-auto py-10 px-4">
-        <h1 className="text-4xl font-bold mb-8">Your Cart</h1>
+
+        <h1 className="text-4xl font-bold mb-8">
+          Your Cart
+        </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
 
           {/* ---------------- ITEMS ---------------- */}
+
           <div className="lg:col-span-2">
-            {cart.map((item) => (
-              <div
-                key={item.id}
-                className="flex gap-6 bg-white p-6 mb-6 rounded-lg shadow"
-              >
-                <div className="relative w-40 h-40">
-                  <Image
-                    src={item.image}
-                    alt={item.name}
-                    fill
-                    className="object-contain"
-                  />
-                </div>
 
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold">
-                    {item.name}
-                  </h3>
-                  <span>Price</span>
-                  {/* PRICE INPUT */}
-                  <input
-                    type="number"
-                    value={prices[item.id] ?? ""}
-                    onChange={(e) =>
-                      setPrices((prev) => ({
-                        ...prev,
-                        [item.id]: Number(e.target.value),
-                      }))
-                    }
-                    className="border px-3 py-2 mt-2 w-32"
-                  />
+            {cart.map((item) => {
+              const availableStock =
+                getStock(item.id);
 
-                  <p className="text-green-600 font-bold mt-2">
-                    Rs {(getPrice(item) * item.quantity).toLocaleString()}
-                  </p>
+              return (
+                <div
+                  key={item.id}
+                  className="flex gap-6 bg-white p-6 mb-6 rounded-lg shadow"
+                >
 
-                  <div className="flex gap-4 mt-3">
-                    <span>Kg/Qty</span>
-                    <input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateQuantity(item.id, Number(e.target.value))
-                      }
-                      className="border px-2 py-1 w-20"
+                  {/* IMAGE */}
+
+                  <div className="relative w-40 h-40">
+
+                    <Image
+                      src={item.image}
+                      alt={item.name}
+                      fill
+                      className="object-contain"
                     />
 
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-red-600"
-                    >
-                      Remove
-                    </button>
                   </div>
+
+                  {/* DETAILS */}
+
+                  <div className="flex-1">
+
+                    <h3 className="text-xl font-bold">
+                      {item.name}
+                    </h3>
+
+                    <span>
+                      Price
+                    </span>
+
+                    {/* PRICE INPUT */}
+
+                    <input
+                      type="number"
+                      value={
+                        prices[item.id] ??
+                        ""
+                      }
+                      onChange={(e) =>
+                        setPrices(
+                          (prev) => ({
+                            ...prev,
+                            [item.id]:
+                              Number(
+                                e.target.value
+                              ),
+                          })
+                        )
+                      }
+                      className="border px-3 py-2 mt-2 w-32"
+                    />
+
+                    {/* ITEM TOTAL */}
+
+                    <p className="text-green-600 font-bold mt-2">
+                      Rs{" "}
+                      {(
+                        getPrice(item) *
+                        item.quantity
+                      ).toLocaleString()}
+                    </p>
+
+                    {/* STOCK */}
+
+                    <p
+                      className={`font-bold mt-2 ${
+                        availableStock > 0
+                          ? "text-blue-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      Available Stock:{" "}
+                      {availableStock}
+                    </p>
+
+                    {/* QUANTITY */}
+
+                    <div className="flex gap-4 mt-3 items-center">
+
+                      <span>
+                        Kg/Qty
+                      </span>
+
+                      <input
+                        type="number"
+                        min={0}
+                        max={
+                          availableStock
+                        }
+                        value={
+                          item.quantity
+                        }
+                        onChange={(e) =>
+                          handleQuantityChange(
+                            item,
+                            e.target.value
+                          )
+                        }
+                        className="border px-2 py-1 w-20"
+                      />
+
+                      <button
+                        onClick={() =>
+                          removeFromCart(
+                            item.id
+                          )
+                        }
+                        className="text-red-600"
+                      >
+                        Remove
+                      </button>
+
+                    </div>
+
+                  </div>
+
                 </div>
-              </div>
-            ))}
+              );
+            })}
+
           </div>
 
           {/* ---------------- SUMMARY ---------------- */}
+
           <div className="bg-gray-100 p-6 rounded-xl">
 
             <h2 className="text-2xl font-bold text-center mb-4">
@@ -222,16 +518,26 @@ export default function Cart() {
             </h2>
 
             {/* CUSTOMER TYPE */}
+
             <div className="mb-4">
+
               <div className="flex gap-3 mb-3">
+
                 <button
                   onClick={() => {
-                    setCustomerType("walking");
-                    setSelectedCustomer(null);
+                    setCustomerType(
+                      "walking"
+                    );
+
+                    setSelectedCustomer(
+                      null
+                    );
+
                     setCustomerName("");
                   }}
                   className={`px-4 py-2 rounded ${
-                    customerType === "walking"
+                    customerType ===
+                    "walking"
                       ? "bg-green-600 text-white"
                       : "bg-gray-200"
                   }`}
@@ -241,203 +547,336 @@ export default function Cart() {
 
                 <button
                   onClick={() => {
-                    setCustomerType("regular");
+                    setCustomerType(
+                      "regular"
+                    );
+
                     setCustomerName("");
                   }}
                   className={`px-4 py-2 rounded ${
-                    customerType === "regular"
+                    customerType ===
+                    "regular"
                       ? "bg-green-600 text-white"
                       : "bg-gray-200"
                   }`}
                 >
                   Regular
                 </button>
+
               </div>
 
               {/* CONDITIONAL INPUT / LIST */}
-              {customerType === "walking" ? (
+
+              {customerType ===
+              "walking" ? (
+
                 <input
                   type="text"
-                  value={customerName}
+                  value={
+                    customerName
+                  }
                   onChange={(e) =>
-                    setCustomerName(e.target.value)
+                    setCustomerName(
+                      e.target.value
+                    )
                   }
                   placeholder="Enter customer name"
                   className="w-full border px-3 py-2 rounded"
                 />
+
               ) : (
+
                 <select
-                  value={selectedCustomer?.id || ""}
+                  value={
+                    selectedCustomer?.id ||
+                    ""
+                  }
                   onChange={(e) => {
-                    const customer = customers.find(
-                      (c: any) =>
-                        String(c.id) === e.target.value
+
+                    const customer =
+                      customers.find(
+                        (c: any) =>
+                          String(c.id) ===
+                          e.target.value
+                      );
+
+                    setSelectedCustomer(
+                      customer || null
                     );
 
-                    setSelectedCustomer(customer || null);
-                    setCustomerName(customer?.name || "");
+                    setCustomerName(
+                      customer?.name ||
+                        ""
+                    );
                   }}
                   className="w-full border p-2 rounded"
                 >
-                  <option value="">Select Customer</option>
 
-                  {customers.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <option value="">
+                    Select Customer
+                  </option>
+
+                  {customers.map(
+                    (c: any) => (
+                      <option
+                        key={c.id}
+                        value={c.id}
+                      >
+                        {c.name}
+                      </option>
+                    )
+                  )}
+
                 </select>
+
               )}
+
             </div>
 
             {/* SUMMARY ITEMS */}
+
             <div className="space-y-2">
+
               <div className="grid grid-cols-3 font-bold border-b pb-2">
-                <span>Item</span>
-                <span className="text-center">Qty/Kg</span>
-                <span className="text-right">Price</span>
+
+                <span>
+                  Item
+                </span>
+
+                <span className="text-center">
+                  Qty/Kg
+                </span>
+
+                <span className="text-right">
+                  Price
+                </span>
+
               </div>
 
               {cart.map((item) => (
+
                 <div
                   key={item.id}
                   className="grid grid-cols-3 border-b py-2"
                 >
-                  <span>{item.name}</span>
+
+                  <span>
+                    {item.name}
+                  </span>
+
                   <span className="text-center">
                     {item.quantity}
                   </span>
+
                   <span className="text-right">
                     Rs{" "}
                     {(
-                      getPrice(item) * item.quantity
+                      getPrice(item) *
+                      item.quantity
                     ).toLocaleString()}
                   </span>
+
                 </div>
+
               ))}
+
             </div>
 
             {/* TOTAL */}
+
             <div className="flex justify-between font-bold mt-4">
-              <span>Total</span>
+
+              <span>
+                Total
+              </span>
+
               <span>
                 Rs{" "}
-                {cart
-                  .reduce(
-                    (sum, item) =>
-                      sum +
-                      getPrice(item) * item.quantity,
-                    0
-                  )
-                  .toLocaleString()}
+                {getCartTotal().toLocaleString()}
               </span>
+
             </div>
 
-            {/* BUTTONS */}
+            {/* SAVE ORDER */}
+
             <button
-              onClick={handleCheckout}
+              onClick={() =>
+                handleCheckout(false)
+              }
               className="w-full bg-green-600 text-white py-3 mt-4"
             >
               Save Order
             </button>
 
+            {/* PRINT BILL */}
+
             <button
-              onClick={() => {
-                handleCheckout();
-                handlePrint();
-              }}
+              onClick={handlePrintBill}
               className="w-full bg-blue-600 text-white py-3 mt-2"
             >
               Print Bill
             </button>
+
           </div>
+
         </div>
+
       </div>
-   <Calculator/>
+
+      <Calculator />
+
+      {/* ---------------- PRINT AREA ---------------- */}
+
       {showPrint &&
         createPortal(
+
           <div
             id="print-area"
             className="border border-black text-sm"
           >
+
             <h2 className="text-center font-bold mb-2">
               بسم اللہ آئرن سٹور
             </h2>
 
             <div className="text-center mb-3">
-              <p>Name: {customerName}</p>
+
+              <p>
+                Name:{" "}
+                {customerName}
+              </p>
+
               <p className="font-bold text-[2px]">
                 Date:{" "}
-                {new Date().toLocaleDateString("en-GB", {
-                  weekday: "long",
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
+                {new Date().toLocaleDateString(
+                  "en-GB",
+                  {
+                    weekday:
+                      "long",
+                    day: "2-digit",
+                    month:
+                      "long",
+                    year:
+                      "numeric",
+                  }
+                )}
               </p>
+
             </div>
 
             <div className="border-t border-b px-0 py-2 font-bold flex">
-              <span className="w-1/4">Item</span>
-              <span className="w-1/4 text-right">Price</span>
-              <span className="w-1/4 text-right">Qty/Kg</span>
-              <span className="w-1/4 text-right">Total</span>
+
+              <span className="w-1/4">
+                Item
+              </span>
+
+              <span className="w-1/4 text-right">
+                Price
+              </span>
+
+              <span className="w-1/4 text-right">
+                Qty/Kg
+              </span>
+
+              <span className="w-1/4 text-right">
+                Total
+              </span>
+
             </div>
 
             {cart.map((item) => (
+
               <div
                 key={item.id}
                 className="bill-row flex py-1 border-b px-0"
               >
-                <span className="w-1/4">{item.name}</span>
+
+                <span className="w-1/4">
+                  {item.name}
+                </span>
+
                 <span className="w-1/4 text-right">
                   {getPrice(item)}
                 </span>
+
                 <span className="w-1/4 text-right">
                   {item.quantity}
                 </span>
+
                 <span className="w-1/4 text-right">
-                  {getPrice(item) * item.quantity}
+                  {(
+                    getPrice(item) *
+                    item.quantity
+                  ).toLocaleString()}
                 </span>
+
               </div>
+
             ))}
-            <div className="flex justify-between classnamej  font-extrabold mt-3 pt-1 p-4  rounded-md">
-              <span>Total</span>
+
+            {/* TOTAL */}
+
+            <div className="flex justify-between font-extrabold mt-3 pt-1 p-4 rounded-md">
+
+              <span>
+                Total
+              </span>
+
               <span>
                 Rs{" "}
-                {cart
-                  .reduce(
-                    (sum, item) =>
-                      sum + getPrice(item) * item.quantity,
-                    0
-                  )
-                  .toLocaleString()}
+                {getCartTotal().toLocaleString()}
               </span>
+
             </div>
 
-           
+            {/* FOOTER */}
 
             <div className="print-footer">
+
               <div className="flex mt-2 justify-between">
+
                 <div className="flex-col gap-2">
-                  <p className="text-sm font-bold text-gray-900">Shop Number</p>
-                  <p className="text-sm font-bold text-gray-900">0307-1038571</p>
+
+                  <p className="text-sm font-bold text-gray-900">
+                    Shop Number
+                  </p>
+
+                  <p className="text-sm font-bold text-gray-900">
+                    0307-1038571
+                  </p>
+
                 </div>
+
                 <div>
+
                   <div className="flex gap-2">
-                    <p>Sign</p>
-                    <span>___________</span>
+
+                    <p>
+                      Sign
+                    </p>
+
+                    <span>
+                      ___________
+                    </span>
+
                   </div>
+
                 </div>
+
               </div>
 
-              <h3 className="text-center text-xl font-bold ">
+              <h3 className="text-center text-xl font-bold">
                 بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
               </h3>
+
             </div>
+
           </div>,
+
           document.body
         )}
-         </>
+
+    </>
   );
 }
+
