@@ -8,7 +8,7 @@ import Link from "next/link";
 import { printBillFromElement } from "../lib/printBill";
 import Calculator from "../components/Calculator";
 
-type PriceMap = Record<number, number>;
+type PriceMap = Record<string, number>;
 
 interface Stocks {
   [key: number]: number;
@@ -21,11 +21,25 @@ export default function Cart() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] =
     useState<any>(null);
+
   const [customerType, setCustomerType] =
     useState("walking");
-  const [showPrint, setShowPrint] = useState(false);
-  const [prices, setPrices] = useState<PriceMap>({});
-  const [stocks, setStocks] = useState<Stocks>({});
+
+  const [showPrint, setShowPrint] =
+    useState(false);
+
+  const [prices, setPrices] =
+    useState<PriceMap>({});
+
+  /* NORMAL PRODUCT STOCK */
+
+  const [productStocks, setProductStocks] =
+    useState<Stocks>({});
+
+  /* STATIONARY STOCK */
+
+  const [stationaryStocks, setStationaryStocks] =
+    useState<Stocks>({});
 
   /* ---------------- CART ---------------- */
 
@@ -35,10 +49,31 @@ export default function Cart() {
     updateQuantity,
   } = useCart();
 
+  /* ---------------- PRICE KEY ---------------- */
+
+  /*
+    Same ID problem solve:
+
+    product ID 1
+    stationary ID 1
+
+    Dono ka price alag hoga.
+  */
+
+  const getPriceKey = (item: any) => {
+    return `${item.type ?? "product"}-${item.id}`;
+  };
+
   /* ---------------- PRICE HELPER ---------------- */
 
   const getPrice = (item: any) => {
-    return prices[item.id] ?? item.price ?? 0;
+    const key = getPriceKey(item);
+
+    return (
+      prices[key] ??
+      item.price ??
+      0
+    );
   };
 
   /* ---------------- TOTAL HELPER ---------------- */
@@ -47,15 +82,18 @@ export default function Cart() {
     return cart.reduce((sum, item) => {
       return (
         sum +
-        getPrice(item) * item.quantity
+        getPrice(item) *
+          Number(item.quantity)
       );
     }, 0);
   };
 
-  /* ---------------- LOAD STOCK ---------------- */
+  /* =====================================================
+     LOAD NORMAL PRODUCT STOCK
+  ===================================================== */
 
   useEffect(() => {
-    const loadStocks = async () => {
+    const loadProductStocks = async () => {
       try {
         const res = await fetch(
           "/api/product-stock",
@@ -68,7 +106,7 @@ export default function Cart() {
 
         if (!res.ok) {
           throw new Error(
-            "Failed to load stock"
+            "Failed to load product stock"
           );
         }
 
@@ -82,28 +120,33 @@ export default function Cart() {
               productId: number;
               stock: number;
             }) => {
-              stockMap[item.productId] =
-                Number(item.stock);
+              stockMap[
+                Number(item.productId)
+              ] = Number(item.stock);
             }
           );
         }
 
-        setStocks(stockMap);
+        console.log(
+          "NORMAL PRODUCT STOCK:",
+          stockMap
+        );
+
+        setProductStocks(stockMap);
       } catch (error) {
         console.error(
-          "Stock loading error:",
+          "Product stock loading error:",
           error
         );
 
-        setStocks({});
+        setProductStocks({});
       }
     };
 
-    loadStocks();
+    loadProductStocks();
 
-    // Same tab stock update
     const handleStockUpdated = () => {
-      loadStocks();
+      loadProductStocks();
     };
 
     window.addEventListener(
@@ -119,6 +162,101 @@ export default function Cart() {
     };
   }, []);
 
+  /* =====================================================
+     LOAD STATIONARY STOCK
+  ===================================================== */
+
+  useEffect(() => {
+    const loadStationaryStocks =
+      async () => {
+        try {
+          const res = await fetch(
+            "/api/stationary-stock",
+            {
+              method: "GET",
+              credentials: "include",
+              cache: "no-store",
+            }
+          );
+
+          if (!res.ok) {
+            throw new Error(
+              "Failed to load stationary stock"
+            );
+          }
+
+          const data = await res.json();
+
+          const stockMap: Stocks = {};
+
+          if (Array.isArray(data)) {
+            data.forEach(
+              (item: {
+                stationaryId: number;
+                stock: number;
+              }) => {
+                stockMap[
+                  Number(
+                    item.stationaryId
+                  )
+                ] = Number(item.stock);
+              }
+            );
+          }
+
+          console.log(
+            "STATIONARY STOCK:",
+            stockMap
+          );
+
+          setStationaryStocks(
+            stockMap
+          );
+        } catch (error) {
+          console.error(
+            "Stationary stock loading error:",
+            error
+          );
+
+          setStationaryStocks({});
+        }
+      };
+
+    loadStationaryStocks();
+
+    const handleStationaryStockUpdated =
+      () => {
+        loadStationaryStocks();
+      };
+
+    window.addEventListener(
+      "stationaryStockUpdated",
+      handleStationaryStockUpdated
+    );
+
+    /*
+      Agar kahin se generic stockUpdated event aaye
+      to stationary stock bhi reload kar dein.
+    */
+
+    window.addEventListener(
+      "stockUpdated",
+      handleStationaryStockUpdated
+    );
+
+    return () => {
+      window.removeEventListener(
+        "stationaryStockUpdated",
+        handleStationaryStockUpdated
+      );
+
+      window.removeEventListener(
+        "stockUpdated",
+        handleStationaryStockUpdated
+      );
+    };
+  }, []);
+
   /* ---------------- FETCH CUSTOMERS ---------------- */
 
   useEffect(() => {
@@ -128,7 +266,10 @@ export default function Cart() {
   const fetchCustomers = async () => {
     try {
       const res = await fetch(
-        "/api/customers"
+        "/api/customers",
+        {
+          credentials: "include",
+        }
       );
 
       const data = await res.json();
@@ -147,21 +288,43 @@ export default function Cart() {
     }
   };
 
-  /* ---------------- GET PRODUCT STOCK ---------------- */
+  /* =====================================================
+     GET CORRECT STOCK
+  ===================================================== */
 
-  const getStock = (productId: number) => {
+  const getStock = (item: any) => {
+    /*
+      STATIONARY
+      ---------
+      stationaryId -> stationaryStocks
+    */
+
+    if (item.type === "stationary") {
+      return Number(
+        stationaryStocks[item.id] ?? 0
+      );
+    }
+
+    /*
+      NORMAL PRODUCT
+      --------------
+      productId -> productStocks
+    */
+
     return Number(
-      stocks[productId] ?? 0
+      productStocks[item.id] ?? 0
     );
   };
 
-  /* ---------------- CHANGE QUANTITY ---------------- */
+  /* =====================================================
+     CHANGE QUANTITY
+  ===================================================== */
 
   const handleQuantityChange = (
     item: any,
     value: string
   ) => {
-    const stock = getStock(item.id);
+    const stock = getStock(item);
 
     let quantity = Number(value);
 
@@ -183,18 +346,23 @@ export default function Cart() {
 
     updateQuantity(
       item.id,
-      quantity
+      quantity,
+      item.type
     );
   };
 
-  /* ---------------- CHECK STOCK BEFORE CHECKOUT ---------------- */
+  /* =====================================================
+     CHECK STOCK BEFORE CHECKOUT
+  ===================================================== */
 
   const checkStockBeforeCheckout = () => {
     for (const item of cart) {
       const availableStock =
-        getStock(item.id);
+        getStock(item);
 
-      if (item.quantity <= 0) {
+      if (
+        Number(item.quantity) <= 0
+      ) {
         alert(
           `Please enter quantity for ${item.name}`
         );
@@ -203,7 +371,7 @@ export default function Cart() {
       }
 
       if (
-        item.quantity >
+        Number(item.quantity) >
         availableStock
       ) {
         alert(
@@ -217,101 +385,216 @@ export default function Cart() {
     return true;
   };
 
-  /* ---------------- REDUCE STOCK ---------------- */
+  /* =====================================================
+     REDUCE STOCK AFTER SALE
+  ===================================================== */
 
-  const reduceStockAfterSale = async () => {
-    try {
-      const updatedStocks: Stocks = {
-        ...stocks,
-      };
+  const reduceStockAfterSale =
+    async () => {
+      try {
+        const updatedProductStocks: Stocks =
+          {
+            ...productStocks,
+          };
 
-      for (const item of cart) {
-        const currentStock = Number(
-          updatedStocks[item.id] ?? 0
-        );
+        const updatedStationaryStocks: Stocks =
+          {
+            ...stationaryStocks,
+          };
 
-        const soldQuantity = Number(
-          item.quantity ?? 0
-        );
-
-        if (
-          soldQuantity >
-          currentStock
-        ) {
-          alert(
-            `Only ${currentStock} stock available for ${item.name}`
+        for (const item of cart) {
+          const soldQuantity = Number(
+            item.quantity ?? 0
           );
 
-          return false;
-        }
+          /* ==========================================
+             STATIONARY STOCK
+          ========================================== */
 
-        /*
-          Example:
+          if (
+            item.type ===
+            "stationary"
+          ) {
+            const currentStock =
+              Number(
+                updatedStationaryStocks[
+                  item.id
+                ] ?? 0
+              );
 
-          Current Stock = 120
-          Sold Quantity = 20
+            if (
+              soldQuantity >
+              currentStock
+            ) {
+              alert(
+                `Only ${currentStock} stock available for ${item.name}`
+              );
 
-          Remaining Stock = 100
-        */
-
-        const remainingStock =
-          currentStock -
-          soldQuantity;
-
-        updatedStocks[item.id] =
-          remainingStock;
-
-        /* -------- SAVE STOCK TO POSTGRESQL -------- */
-
-        const response =
-          await fetch(
-            "/api/product-stock",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              credentials: "include",
-
-              body: JSON.stringify({
-                productId: item.id,
-                stock: remainingStock,
-              }),
+              return false;
             }
-          );
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to update stock for ${item.name}`
-          );
+            const remainingStock =
+              currentStock -
+              soldQuantity;
+
+            updatedStationaryStocks[
+              item.id
+            ] = remainingStock;
+
+            console.log(
+              "REDUCING STATIONARY STOCK:",
+              {
+                stationaryId:
+                  item.id,
+                currentStock,
+                soldQuantity,
+                remainingStock,
+              }
+            );
+
+            const response =
+              await fetch(
+                "/api/stationary-stock",
+                {
+                  method: "POST",
+
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+
+                  credentials:
+                    "include",
+
+                  body: JSON.stringify({
+                    stationaryId:
+                      item.id,
+                    stock:
+                      remainingStock,
+                  }),
+                }
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                `Failed to update stationary stock for ${item.name}`
+              );
+            }
+          }
+
+          /* ==========================================
+             NORMAL PRODUCT STOCK
+          ========================================== */
+
+          else {
+            const currentStock =
+              Number(
+                updatedProductStocks[
+                  item.id
+                ] ?? 0
+              );
+
+            if (
+              soldQuantity >
+              currentStock
+            ) {
+              alert(
+                `Only ${currentStock} stock available for ${item.name}`
+              );
+
+              return false;
+            }
+
+            const remainingStock =
+              currentStock -
+              soldQuantity;
+
+            updatedProductStocks[
+              item.id
+            ] = remainingStock;
+
+            console.log(
+              "REDUCING PRODUCT STOCK:",
+              {
+                productId:
+                  item.id,
+                currentStock,
+                soldQuantity,
+                remainingStock,
+              }
+            );
+
+            const response =
+              await fetch(
+                "/api/product-stock",
+                {
+                  method: "POST",
+
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+
+                  credentials:
+                    "include",
+
+                  body: JSON.stringify({
+                    productId:
+                      item.id,
+                    stock:
+                      remainingStock,
+                  }),
+                }
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                `Failed to update product stock for ${item.name}`
+              );
+            }
+          }
         }
+
+        /* ==========================================
+           UPDATE LOCAL STATE
+        ========================================== */
+
+        setProductStocks(
+          updatedProductStocks
+        );
+
+        setStationaryStocks(
+          updatedStationaryStocks
+        );
+
+        /* ==========================================
+           NOTIFY OTHER COMPONENTS
+        ========================================== */
+
+        window.dispatchEvent(
+          new Event("stockUpdated")
+        );
+
+        window.dispatchEvent(
+          new Event(
+            "stationaryStockUpdated"
+          )
+        );
+
+        return true;
+      } catch (error) {
+        console.error(
+          "Stock update error:",
+          error
+        );
+
+        return false;
       }
+    };
 
-      /* -------- UPDATE CURRENT STATE -------- */
-
-      setStocks(updatedStocks);
-
-      /* -------- NOTIFY OTHER COMPONENTS -------- */
-
-      window.dispatchEvent(
-        new Event("stockUpdated")
-      );
-
-      return true;
-    } catch (error) {
-      console.error(
-        "Stock update error:",
-        error
-      );
-
-      return false;
-    }
-  };
-
-  /* ---------------- CHECKOUT ---------------- */
+  /* =====================================================
+     CHECKOUT
+  ===================================================== */
 
   const handleCheckout = async (
     shouldPrint = false
@@ -320,8 +603,7 @@ export default function Cart() {
       /* ---------- CUSTOMER CHECK ---------- */
 
       if (
-        customerType ===
-          "regular" &&
+        customerType === "regular" &&
         !selectedCustomer
       ) {
         alert(
@@ -371,6 +653,8 @@ export default function Cart() {
               "application/json",
           },
 
+          credentials: "include",
+
           body: JSON.stringify({
             customer:
               customerType ===
@@ -384,14 +668,15 @@ export default function Cart() {
               (item) => ({
                 name: item.name,
 
-                price: getPrice(item),
+                price:
+                  getPrice(item),
 
                 quantity:
                   item.quantity,
 
                 total:
                   getPrice(item) *
-                  item.quantity,
+                  Number(item.quantity),
               })
             ),
 
@@ -408,15 +693,8 @@ export default function Cart() {
 
       if (response.ok) {
         /*
-          IMPORTANT:
-
-          Order successfully saved
-          FIRST.
-
+          Order successfully saved FIRST.
           Then stock is reduced.
-
-          Example:
-          120 - 20 = 100
         */
 
         const stockUpdated =
@@ -462,6 +740,7 @@ export default function Cart() {
 
       alert(
         data?.message ||
+          data?.error ||
           "Failed to save order ❌"
       );
 
@@ -520,11 +799,11 @@ export default function Cart() {
 
             {cart.map((item) => {
               const availableStock =
-                getStock(item.id);
+                getStock(item);
 
               return (
                 <div
-                  key={item.id}
+                  key={`${item.type}-${item.id}`}
                   className="flex gap-6 bg-white p-6 mb-6 rounded-lg shadow"
                 >
 
@@ -558,16 +837,25 @@ export default function Cart() {
                     <input
                       type="number"
                       value={
-                        prices[item.id] ??
-                        ""
+                        prices[
+                          getPriceKey(
+                            item
+                          )
+                        ] ?? ""
                       }
                       onChange={(e) =>
                         setPrices(
                           (prev) => ({
                             ...prev,
-                            [item.id]:
+
+                            [
+                              getPriceKey(
+                                item
+                              )
+                            ]:
                               Number(
-                                e.target.value
+                                e.target
+                                  .value
                               ),
                           })
                         )
@@ -581,11 +869,20 @@ export default function Cart() {
                       Rs{" "}
                       {(
                         getPrice(item) *
-                        item.quantity
+                        Number(
+                          item.quantity
+                        )
                       ).toLocaleString()}
                     </p>
 
                     {/* STOCK */}
+
+                    <p className="text-sm text-gray-600 mt-1">
+                      Available Stock:{" "}
+                      <span className="font-bold">
+                        {availableStock}
+                      </span>
+                    </p>
 
                     {/* ---------------- QUANTITY ---------------- */}
 
@@ -616,7 +913,8 @@ export default function Cart() {
                       <button
                         onClick={() =>
                           removeFromCart(
-                            item.id
+                            item.id,
+                            item.type
                           )
                         }
                         className="text-red-600"
@@ -788,7 +1086,7 @@ export default function Cart() {
               {cart.map((item) => (
 
                 <div
-                  key={item.id}
+                  key={`${item.type}-${item.id}`}
                   className="grid grid-cols-3 border-b py-2"
                 >
 
@@ -804,7 +1102,9 @@ export default function Cart() {
                     Rs{" "}
                     {(
                       getPrice(item) *
-                      item.quantity
+                      Number(
+                        item.quantity
+                      )
                     ).toLocaleString()}
                   </span>
 
@@ -921,7 +1221,7 @@ export default function Cart() {
             {cart.map((item) => (
 
               <div
-                key={item.id}
+                key={`${item.type}-${item.id}`}
                 className="bill-row flex py-1 border-b px-0"
               >
 
@@ -940,7 +1240,9 @@ export default function Cart() {
                 <span className="w-1/4 text-right">
                   {(
                     getPrice(item) *
-                    item.quantity
+                    Number(
+                      item.quantity
+                    )
                   ).toLocaleString()}
                 </span>
 
@@ -971,9 +1273,7 @@ export default function Cart() {
 
                 <div className="flex-col gap-2">
 
-                  <p className="text-sm font-bold text-gray-900">
-                    Shop Number
-                  </p>
+                 
 
                   <p className="text-sm font-bold text-gray-900">
                     0307-1038571
@@ -999,7 +1299,7 @@ export default function Cart() {
 
               </div>
 
-              <h3 className="text-center text-xl font-bold">
+              <h3 className="text-center text-lg font-bold">
                 بسم اللہ آئرن سٹور جمالپور نزد ماہر والا پٹرول پمپ قائم پور روڈ
               </h3>
 

@@ -22,22 +22,21 @@ model Customer {
 }
 
 model CustomerItem {
-  id            Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  customerName  String
-  item          String
-  quantity      Float
-  price         Float
-  totalPrice    Float
-  paidPrice     Float    @default(0)
-  remainingPrice Float   @default(0)
-  overallTotal      Float?
-  overallPaid       Float?
-  overallRemaining  Float?
+  customerName     String
+  item             String
+  quantity         Float
+  price            Float
+  totalPrice       Float
+  paidPrice        Float  @default(0)
+  remainingPrice   Float  @default(0)
+  overallTotal     Float?
+  overallPaid      Float?
+  overallRemaining Float?
 
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 ////////////////////////////////////////////////////
@@ -59,11 +58,11 @@ model Order {
   customerId Int?
   customer   Customer? @relation(fields: [customerId], references: [id])
 
-  customerName String
-  total        Float
+  customerName         String
+  total                Float
   // Editable Items Calculated Total
   itemsCalculatedTotal Float?
-  items OrderItem[]
+  items                OrderItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -75,12 +74,11 @@ model OrderItem {
   orderId Int
   order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  name     String
-  price    Float
-  quantity Float
-  total    Float
- createdAt DateTime @default(now())
-
+  name      String
+  price     Float
+  quantity  Float
+  total     Float
+  createdAt DateTime @default(now())
 }
 
 ////////////////////////////////////////////////////
@@ -110,10 +108,19 @@ model WalkingItem {
   quantity Float?
   total    Float?
 }
+
 model ProductStock {
   id        Int      @id @default(autoincrement())
   productId Int      @unique
   stock     Float    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model StationaryStock {
+  id           Int      @id @default(autoincrement())
+  stationaryId Int      @unique
+  stock        Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

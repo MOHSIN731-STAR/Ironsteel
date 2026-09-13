@@ -10,10 +10,17 @@ interface Stocks {
   [key: number]: number;
 }
 
+interface StockData {
+  stationaryId: number;
+  stock: number;
+}
+
 export default function Products() {
   const [stocks, setStocks] = useState<Stocks>({});
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] =
+    useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
   const router = useRouter();
 
@@ -22,15 +29,22 @@ export default function Products() {
   useEffect(() => {
     const checkLogin = async () => {
       try {
-        const response = await fetch("/api/auth/me", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/auth/me",
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
         setIsLoggedIn(response.ok);
       } catch (error) {
-        console.error("Auth check error:", error);
+        console.error(
+          "Auth check error:",
+          error
+        );
+
         setIsLoggedIn(false);
       } finally {
         setLoading(false);
@@ -40,58 +54,61 @@ export default function Products() {
     checkLogin();
   }, []);
 
-  /* ---------------- STOCK LOAD FROM DATABASE ---------------- */
+  /* ---------------- LOAD STATIONARY STOCK ---------------- */
 
   useEffect(() => {
     const loadStocks = async () => {
       try {
-        const response = await fetch("/api/product-stock", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/stationary-stock",
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
         if (!response.ok) {
-          throw new Error("Failed to load product stocks");
+          throw new Error(
+            "Failed to load stationary stocks"
+          );
         }
 
-        const data = await response.json();
+        const data: StockData[] =
+          await response.json();
 
         const stockMap: Stocks = {};
 
-        /*
-         * Har stationary product ka default stock 0
-         */
-        stationaryProducts.forEach((product) => {
-          stockMap[product.id] = 0;
-        });
+        /* Default stock = 0 */
 
-        /*
-         * Database se stock load karein
-         */
+        stationaryProducts.forEach(
+          (product) => {
+            stockMap[product.id] = 0;
+          }
+        );
+
+        /* Database stock */
+
         if (Array.isArray(data)) {
-          data.forEach(
-            (item: {
-              productId: number;
-              stock: number;
-            }) => {
-              /*
-               * Sirf stationary products ka stock
-               * is page par show hoga.
-               */
-              const isStationaryProduct =
-                stationaryProducts.some(
-                  (product) =>
-                    product.id === item.productId
-                );
+          data.forEach((item) => {
+            const productExists =
+              stationaryProducts.some(
+                (product) =>
+                  product.id ===
+                  item.stationaryId
+              );
 
-              if (isStationaryProduct) {
-                stockMap[item.productId] =
-                  Number(item.stock);
-              }
+            if (productExists) {
+              stockMap[item.stationaryId] =
+                Number(item.stock);
             }
-          );
+          });
         }
+
+        console.log(
+          "STATIONARY STOCK MAP:",
+          stockMap
+        );
 
         setStocks(stockMap);
       } catch (error) {
@@ -100,26 +117,22 @@ export default function Products() {
           error
         );
 
-        /*
-         * API fail ho to 0 show karein
-         */
         const emptyStocks: Stocks = {};
 
-        stationaryProducts.forEach((product) => {
-          emptyStocks[product.id] = 0;
-        });
+        stationaryProducts.forEach(
+          (product) => {
+            emptyStocks[product.id] = 0;
+          }
+        );
 
         setStocks(emptyStocks);
       }
     };
 
-    // Initial database load
     loadStocks();
 
-    /*
-     * Jab StationaryStockInput se
-     * Save All Stocks ho
-     */
+    /* ---------------- STOCK UPDATE EVENT ---------------- */
+
     const handleStockUpdated = () => {
       loadStocks();
     };
@@ -129,9 +142,6 @@ export default function Products() {
       handleStockUpdated
     );
 
-    /*
-     * Normal stock update event bhi listen karein
-     */
     window.addEventListener(
       "stockUpdated",
       handleStockUpdated
@@ -152,7 +162,9 @@ export default function Products() {
 
   /* ---------------- PRODUCT CLICK ---------------- */
 
-  const handleProductClick = (product: Product) => {
+  const handleProductClick = (
+    product: Product
+  ) => {
     if (!isLoggedIn) {
       router.push("/components/login");
       return;
@@ -178,51 +190,52 @@ export default function Products() {
 
   return (
     <div>
-
       <div className="container mx-auto py-12 px-4">
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {stationaryProducts.map(
+            (product) => (
+              <div
+                key={product.id}
+                onClick={() =>
+                  handleProductClick(
+                    product
+                  )
+                }
+                className="cursor-pointer"
+              >
+                <div className="relative">
 
-          {stationaryProducts.map((product) => (
+                  {/* STOCK BADGE */}
 
-            <div
-              key={product.id}
-              onClick={() =>
-                handleProductClick(product)
-              }
-              className="cursor-pointer"
-            >
+                  <div
+                    className={`absolute top-2 right-2 z-20 px-3 py-1 rounded-full text-xs font-bold shadow-md ${
+                      (stocks[
+                        product.id
+                      ] ?? 0) > 0
+                        ? "bg-green-600 text-white"
+                        : "bg-red-600 text-white"
+                    }`}
+                  >
+                    Stock:{" "}
+                    {stocks[
+                      product.id
+                    ] ?? 0}
+                  </div>
 
-              <div className="relative">
+                  {/* IMPORTANT:
+                      Stationary type */}
+                  
+                  <ProductCard
+                    product={product}
+                    type="stationary"
+                  />
 
-                {/* STOCK BADGE */}
-
-                <div
-                  className={`absolute top-2 right-2 z-20 px-3 py-1 rounded-full text-xs font-bold shadow-md ${
-                    (stocks[product.id] ?? 0) > 0
-                      ? "bg-green-600 text-white"
-                      : "bg-red-600 text-white"
-                  }`}
-                >
-                  Stock: {stocks[product.id] ?? 0}
                 </div>
-
-                {/* PRODUCT */}
-
-                <ProductCard
-                  product={product}
-                />
-
               </div>
-
-            </div>
-
-          ))}
-
+            )
+          )}
         </div>
-
       </div>
-
     </div>
   );
 }

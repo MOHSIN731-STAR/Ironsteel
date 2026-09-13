@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,6 +6,7 @@ import ProductCard from "./../components/ProductCard";
 import { products, Product } from "./../types/product";
 import { useRouter } from "next/navigation";
 import Calculator from "./../components/Calculator";
+import { useCart } from "./../context/CartContext";
 
 interface Stocks {
   [key: number]: number;
@@ -16,6 +18,10 @@ export default function Products() {
   const [stocks, setStocks] = useState<Stocks>({});
 
   const router = useRouter();
+
+  /* ---------------- CART ---------------- */
+
+  const { addToCart } = useCart();
 
   /* ---------------- LOGIN CHECK ---------------- */
 
@@ -96,40 +102,46 @@ export default function Products() {
       }
     };
 
-    // Initial load
+    /*
+     * Initial load
+     */
     loadStocks();
 
     /*
-     * StockInput se stock update hone ke baad
+     * Stock update hone ke baad
      * Products page automatically refresh karega
      */
-    window.addEventListener(
-      "stockUpdated",
-      loadStocks
-    );
+    window.addEventListener("stockUpdated", loadStocks);
 
     return () => {
-      window.removeEventListener(
-        "stockUpdated",
-        loadStocks
-      );
+      window.removeEventListener("stockUpdated", loadStocks);
     };
   }, []);
 
   /* ---------------- PRODUCT CLICK ---------------- */
 
-  const handleProductClick = (
-    product: Product
-  ) => {
+  const handleProductClick = (product: Product) => {
+    /*
+     * Login nahi hai to login page
+     */
     if (!isLoggedIn) {
       router.push("/components/login");
       return;
     }
 
-    console.log(
-      "Product clicked:",
-      product
-    );
+    /*
+     * Normal product cart mein add
+     *
+     * CartContext ke according:
+     * type = "product"
+     */
+    addToCart({
+      ...product,
+      quantity: 1,
+      type: "product",
+    });
+
+    console.log("Normal product added to cart:", product);
   };
 
   /* ---------------- LOADING ---------------- */
@@ -146,24 +158,22 @@ export default function Products() {
 
   return (
     <div>
+      {/* Calculator */}
 
       <Calculator />
 
+      {/* Products Grid */}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-
         {products.map((product) => (
-
           <div
             key={product.id}
-            onClick={() =>
-              handleProductClick(product)
-            }
+            onClick={() => handleProductClick(product)}
             className="cursor-pointer"
           >
-
             <div className="relative">
 
-              {/* STOCK BADGE */}
+              {/* ---------------- STOCK BADGE ---------------- */}
 
               <div
                 className={`absolute top-2 right-2 z-20 px-3 py-1 rounded-full text-xs font-bold shadow-md ${
@@ -172,24 +182,16 @@ export default function Products() {
                     : "bg-red-600 text-white"
                 }`}
               >
-                Stock:{" "}
-                {stocks[product.id] ?? 0}
+                Stock: {stocks[product.id] ?? 0}
               </div>
 
-              {/* PRODUCT CARD */}
+              {/* ---------------- PRODUCT CARD ---------------- */}
 
-              <ProductCard
-                product={product}
-              />
-
+              <ProductCard product={product} />
             </div>
-
           </div>
-
         ))}
-
       </div>
-
     </div>
   );
 }

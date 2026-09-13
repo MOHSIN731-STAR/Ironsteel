@@ -2,19 +2,30 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { stationaryProducts } from "../../types/stationaryProduct";
 
 interface Stocks {
   [key: number]: number;
 }
 
+interface StockData {
+  id: number;
+  stationaryId: number;
+  stock: number;
+}
+
 export default function StationaryStockInput() {
   const [stocks, setStocks] = useState<Stocks>({});
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  /* ---------------- LOGIN CHECK ---------------- */
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  /* =====================================================
+     LOGIN CHECK
+  ===================================================== */
 
   useEffect(() => {
     const checkLogin = async () => {
@@ -37,90 +48,143 @@ export default function StationaryStockInput() {
     checkLogin();
   }, []);
 
-  /* ---------------- STOCK LOAD FROM DATABASE ---------------- */
+  /* =====================================================
+     LOAD STATIONARY STOCK
+  ===================================================== */
 
   useEffect(() => {
     const loadStocks = async () => {
       try {
-        const response = await fetch("/api/product-stock", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to load stationary stocks");
-        }
+        const response = await fetch(
+          "/api/stationary-stock",
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
         const data = await response.json();
 
+        console.log(
+          "STATIONARY STOCK DATA:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data?.details ||
+              data?.error ||
+              "Failed to load stationary stocks"
+          );
+        }
+
+        /* ---------------------------------------------
+           Default stock for all stationary products
+        --------------------------------------------- */
+
         const stockMap: Stocks = {};
 
-        stationaryProducts.forEach((product) => {
-          stockMap[product.id] = 0;
-        });
+        stationaryProducts.forEach(
+          (product) => {
+            stockMap[product.id] = 0;
+          }
+        );
+
+        /* ---------------------------------------------
+           Database stock
+        --------------------------------------------- */
 
         if (Array.isArray(data)) {
           data.forEach(
-            (item: {
-              productId: number;
-              stock: number;
-            }) => {
+            (item: StockData) => {
+              const stationaryId =
+                Number(item.stationaryId);
+
+              const stock =
+                Number(item.stock);
+
+              console.log(
+                "STATIONARY:",
+                stationaryId,
+                "STOCK:",
+                stock
+              );
+
               /*
-               * Sirf stationary products ka stock
-               * load hoga.
+               * Database stationaryId
+               * = stationaryProducts.id
                */
+
               if (
                 stationaryProducts.some(
-                  (product) => product.id === item.productId
+                  (product) =>
+                    product.id ===
+                    stationaryId
                 )
               ) {
-                stockMap[item.productId] = Number(item.stock);
+                stockMap[stationaryId] =
+                  stock;
               }
             }
           );
         }
 
+        console.log(
+          "FINAL STATIONARY STOCK MAP:",
+          stockMap
+        );
+
         setStocks(stockMap);
       } catch (error) {
         console.error(
-          "Stationary stock loading error:",
+          "Stationary stock load error:",
           error
         );
 
-        const emptyStocks: Stocks = {};
+        /*
+         * API fail hone par
+         * default 0
+         */
 
-        stationaryProducts.forEach((product) => {
-          emptyStocks[product.id] = 0;
-        });
+        const defaultStocks: Stocks = {};
 
-        setStocks(emptyStocks);
+        stationaryProducts.forEach(
+          (product) => {
+            defaultStocks[product.id] = 0;
+          }
+        );
+
+        setStocks(defaultStocks);
       }
     };
 
+    /* Initial load */
     loadStocks();
 
-    const handleStockUpdated = () => {
-      loadStocks();
-    };
+    /* ---------------------------------------------
+       Listen for stock updates
+    --------------------------------------------- */
 
     window.addEventListener(
       "stationaryStockUpdated",
-      handleStockUpdated
+      loadStocks
     );
 
     return () => {
       window.removeEventListener(
         "stationaryStockUpdated",
-        handleStockUpdated
+        loadStocks
       );
     };
   }, []);
 
-  /* ---------------- STOCK CHANGE ---------------- */
+  /* =====================================================
+     STOCK CHANGE
+  ===================================================== */
 
   const handleStockChange = (
-    productId: number,
+    stationaryId: number,
     value: string
   ) => {
     if (!isLoggedIn) {
@@ -128,7 +192,9 @@ export default function StationaryStockInput() {
     }
 
     const newStock =
-      value === "" ? 0 : Number(value);
+      value === ""
+        ? 0
+        : Number(value);
 
     if (Number.isNaN(newStock)) {
       return;
@@ -138,100 +204,139 @@ export default function StationaryStockInput() {
       return;
     }
 
-    /*
-     * Sirf UI/state update hoga.
-     * Database Save All button se hoga.
-     */
     setStocks((prev) => ({
       ...prev,
-      [productId]: newStock,
+      [stationaryId]: newStock,
     }));
+
+    setSaved(false);
   };
 
-  /* ---------------- SAVE ALL STOCKS ---------------- */
+  /* =====================================================
+     SAVE ALL STATIONARY STOCKS
+  ===================================================== */
 
   const handleSaveAllStocks = async () => {
     if (!isLoggedIn) {
-      alert("Pehle login karein ❌");
       return;
     }
-
-    if (saving) {
-      return;
-    }
-
-    setSaving(true);
 
     try {
+      setSaving(true);
+      setSaved(false);
+
       /*
-       * Har stationary product ka stock
-       * database mein save/update hoga.
+       * Har stationary product ka
+       * apna stationaryId save hoga.
        */
-      for (const product of stationaryProducts) {
-        const stock = Number(
-          stocks[product.id] ?? 0
-        );
 
-        const response = await fetch(
-          "/api/product-stock",
-          {
-            method: "POST",
+      await Promise.all(
+        stationaryProducts.map(
+          async (product) => {
+            const stock =
+              stocks[product.id] ?? 0;
 
-            headers: {
-              "Content-Type": "application/json",
-            },
+            console.log(
+              "SAVING:",
+              {
+                stationaryId:
+                  product.id,
+                stock: stock,
+              }
+            );
 
-            credentials: "include",
+            const response =
+              await fetch(
+                "/api/stationary-stock",
+                {
+                  method: "POST",
 
-            body: JSON.stringify({
-              productId: product.id,
-              stock,
-            }),
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+
+                  credentials:
+                    "include",
+
+                  body: JSON.stringify({
+                    stationaryId:
+                      product.id,
+                    stock: stock,
+                  }),
+                }
+              );
+
+            const data =
+              await response
+                .json()
+                .catch(
+                  () => null
+                );
+
+            console.log(
+              "SAVE RESPONSE:",
+              data
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                data?.details ||
+                  data?.error ||
+                  `Failed to save ${product.name}`
+              );
+            }
           }
-        );
+        )
+      );
 
-        if (!response.ok) {
-          const errorData = await response
-            .json()
-            .catch(() => null);
+      /* ---------------------------------------------
+         Successfully saved
+      --------------------------------------------- */
 
-          throw new Error(
-            errorData?.error ||
-              `Failed to save ${product.name}`
-          );
-        }
-      }
+      setSaved(true);
 
-      /* -------- NOTIFY OTHER COMPONENTS -------- */
+      /*
+       * Products page ko notify
+       */
 
       window.dispatchEvent(
-        new Event("stationaryStockUpdated")
+        new Event(
+          "stationaryStockUpdated"
+        )
       );
+
+      /*
+       * Agar Products page bhi
+       * stockUpdated use karta hai
+       */
 
       window.dispatchEvent(
         new Event("stockUpdated")
       );
 
-      alert(
-        "Stationary stocks successfully save ho gaye ✅"
-      );
+      setTimeout(() => {
+        setSaved(false);
+      }, 2000);
     } catch (error) {
       console.error(
-        "Stationary stock save error:",
+        "Save stationary stocks error:",
         error
       );
 
       alert(
         error instanceof Error
           ? error.message
-          : "Stationary stock save nahi ho saka ❌"
+          : "Stationary stock save nahi ho saka."
       );
     } finally {
       setSaving(false);
     }
   };
 
-  /* ---------------- LOADING ---------------- */
+  /* =====================================================
+     LOADING
+  ===================================================== */
 
   if (loading) {
     return (
@@ -243,14 +348,18 @@ export default function StationaryStockInput() {
     );
   }
 
-  /* ---------------- UI ---------------- */
+  /* =====================================================
+     UI
+  ===================================================== */
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
 
       <div className="max-w-5xl mx-auto">
 
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div className="bg-white rounded-2xl shadow-md p-5 mb-6">
 
@@ -259,24 +368,40 @@ export default function StationaryStockInput() {
           </h1>
 
           <p className="text-sm text-gray-500 mt-1">
-            Yahan se stationary product ka stock update karein.
+            Yahan se stationary product ka stock
+            update karein.
           </p>
+
+          <Link
+            href="/products"
+            className="text-blue-500 hover:underline"
+          >
+            Products
+          </Link>
+
+          {/* NOT LOGGED IN */}
 
           {!isLoggedIn && (
             <div className="mt-4 bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm font-medium">
-              🔒 Stock enter karne ke liye pehle login karein.
+              🔒 Stock enter karne ke liye
+              pehle login karein.
             </div>
           )}
 
+          {/* LOGGED IN */}
+
           {isLoggedIn && (
             <div className="mt-4 bg-green-50 border border-green-200 text-green-600 rounded-lg px-4 py-3 text-sm font-medium">
-              ✓ Login successful. Stock update kar sakte hain.
+              ✓ Login successful. Stock update
+              kar sakte hain.
             </div>
           )}
 
         </div>
 
-        {/* PRODUCTS */}
+        {/* =================================================
+            STATIONARY PRODUCTS
+        ================================================= */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
@@ -290,7 +415,7 @@ export default function StationaryStockInput() {
 
                 <div className="flex items-center gap-4">
 
-                  {/* PRODUCT IMAGE */}
+                  {/* IMAGE */}
 
                   <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
 
@@ -304,7 +429,7 @@ export default function StationaryStockInput() {
 
                   </div>
 
-                  {/* NAME + INPUT */}
+                  {/* NAME + STOCK */}
 
                   <div className="flex-1 min-w-0">
 
@@ -317,7 +442,9 @@ export default function StationaryStockInput() {
                       min="0"
                       step="any"
                       value={
-                        stocks[product.id] ?? 0
+                        stocks[
+                          product.id
+                        ] ?? 0
                       }
                       disabled={!isLoggedIn}
                       onChange={(e) =>
@@ -357,37 +484,52 @@ export default function StationaryStockInput() {
 
         </div>
 
-        {/* SAVE ALL BUTTON */}
+        {/* =================================================
+            SAVE ALL BUTTON
+        ================================================= */}
 
-        {isLoggedIn && (
-          <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex justify-center">
 
-            <button
-              type="button"
-              onClick={handleSaveAllStocks}
-              disabled={saving}
-              className={`
-                px-8
-                py-3
-                rounded-xl
-                font-semibold
-                text-white
-                shadow-md
-                transition
-                ${
-                  saving
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700 active:scale-95"
-                }
-              `}
-            >
-              {saving
-                ? "Saving..."
-                : "💾 Save All Stocks"}
-            </button>
+          <button
+            type="button"
+            disabled={
+              !isLoggedIn || saving
+            }
+            onClick={
+              handleSaveAllStocks
+            }
+            className={`
+              w-full
+              sm:w-auto
+              min-w-[220px]
+              px-8
+              py-3
+              rounded-xl
+              font-bold
+              text-white
+              shadow-md
+              transition
+              ${
+                !isLoggedIn
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : saving
+                  ? "bg-blue-400 cursor-wait"
+                  : saved
+                  ? "bg-green-600"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }
+            `}
+          >
 
-          </div>
-        )}
+            {saving
+              ? "Saving All Stocks..."
+              : saved
+              ? "✓ All Stocks Saved"
+              : "Save All Stock"}
+
+          </button>
+
+        </div>
 
       </div>
 
