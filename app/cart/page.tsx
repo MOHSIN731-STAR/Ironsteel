@@ -31,6 +31,12 @@ export default function Cart() {
   const [prices, setPrices] =
     useState<PriceMap>({});
 
+  /* 10 SECOND BUTTON COOLDOWN */
+
+  const [cooldown, setCooldown] = useState(0);
+  const [isProcessing, setIsProcessing] =
+    useState(false);
+
   /* NORMAL PRODUCT STOCK */
 
   const [productStocks, setProductStocks] =
@@ -78,6 +84,31 @@ export default function Cart() {
       );
     }, 0);
   };
+
+  /* =====================================================
+     10 SECOND COOLDOWN
+  ===================================================== */
+
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [cooldown]);
 
   /* =====================================================
      LOAD NORMAL PRODUCT STOCK
@@ -225,11 +256,6 @@ export default function Cart() {
       handleStationaryStockUpdated
     );
 
-    /*
-      Agar kahin se generic stockUpdated event aaye
-      to stationary stock bhi reload kar dein.
-    */
-
     window.addEventListener(
       "stockUpdated",
       handleStationaryStockUpdated
@@ -284,23 +310,11 @@ export default function Cart() {
   ===================================================== */
 
   const getStock = (item: any) => {
-    /*
-      STATIONARY
-      ---------
-      stationaryId -> stationaryStocks
-    */
-
     if (item.type === "stationary") {
       return Number(
         stationaryStocks[item.id] ?? 0
       );
     }
-
-    /*
-      NORMAL PRODUCT
-      --------------
-      productId -> productStocks
-    */
 
     return Number(
       productStocks[item.id] ?? 0
@@ -628,6 +642,26 @@ export default function Cart() {
   const handleCheckout = async (
     shouldPrint = false
   ) => {
+    /*
+      Prevent double click.
+      10 seconds ke andar dobara order save
+      ya print nahi hoga.
+    */
+
+    if (
+      isProcessing ||
+      cooldown > 0
+    ) {
+      return false;
+    }
+
+    /*
+      Immediately lock buttons.
+    */
+
+    setIsProcessing(true);
+    setCooldown(10);
+
     try {
       /* ---------- CUSTOMER CHECK ---------- */
 
@@ -639,6 +673,9 @@ export default function Cart() {
           "Please select customer"
         );
 
+        setCooldown(0);
+        setIsProcessing(false);
+
         return false;
       }
 
@@ -647,11 +684,17 @@ export default function Cart() {
           "Please enter customer name"
         );
 
+        setCooldown(0);
+        setIsProcessing(false);
+
         return false;
       }
 
       if (!cart.length) {
         alert("Cart is empty");
+
+        setCooldown(0);
+        setIsProcessing(false);
 
         return false;
       }
@@ -662,6 +705,9 @@ export default function Cart() {
         checkStockBeforeCheckout();
 
       if (!stockAvailable) {
+        setCooldown(0);
+        setIsProcessing(false);
+
         return false;
       }
 
@@ -782,6 +828,13 @@ export default function Cart() {
       );
 
       return false;
+    } finally {
+      /*
+        API complete hone ke baad bhi
+        10 second ka cooldown continue rahega.
+      */
+
+      setIsProcessing(false);
     }
   };
 
@@ -1202,9 +1255,20 @@ export default function Cart() {
               onClick={() =>
                 handleCheckout(false)
               }
-              className="w-full bg-green-600 text-white py-3 mt-4"
+              disabled={
+                isProcessing ||
+                cooldown > 0
+              }
+              className={`w-full text-white py-3 mt-4 ${
+                isProcessing ||
+                cooldown > 0
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600"
+              }`}
             >
-              Save Order
+              {cooldown > 0
+                ? `Please Wait ${cooldown}s`
+                : "Save Order"}
             </button>
 
             {/* PRINT BILL */}
@@ -1213,9 +1277,20 @@ export default function Cart() {
               onClick={
                 handlePrintBill
               }
-              className="w-full bg-blue-600 text-white py-3 mt-2"
+              disabled={
+                isProcessing ||
+                cooldown > 0
+              }
+              className={`w-full text-white py-3 mt-2 ${
+                isProcessing ||
+                cooldown > 0
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600"
+              }`}
             >
-              Print Bill
+              {cooldown > 0
+                ? `Please Wait ${cooldown}s`
+                : "Print Bill"}
             </button>
 
           </div>
