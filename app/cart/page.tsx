@@ -51,15 +51,6 @@ export default function Cart() {
 
   /* ---------------- PRICE KEY ---------------- */
 
-  /*
-    Same ID problem solve:
-
-    product ID 1
-    stationary ID 1
-
-    Dono ka price alag hoga.
-  */
-
   const getPriceKey = (item: any) => {
     return `${item.type ?? "product"}-${item.id}`;
   };
@@ -349,6 +340,44 @@ export default function Cart() {
       quantity,
       item.type
     );
+  };
+
+  /* =====================================================
+     DECREASE QUANTITY
+  ===================================================== */
+
+  const handleDecrease = (item: any) => {
+    const currentQuantity =
+      Number(item.quantity) || 0;
+
+    if (currentQuantity > 0) {
+      handleQuantityChange(
+        item,
+        String(currentQuantity - 1)
+      );
+    }
+  };
+
+  /* =====================================================
+     INCREASE QUANTITY
+  ===================================================== */
+
+  const handleIncrease = (item: any) => {
+    const stock = getStock(item);
+
+    const currentQuantity =
+      Number(item.quantity) || 0;
+
+    if (currentQuantity < stock) {
+      handleQuantityChange(
+        item,
+        String(currentQuantity + 1)
+      );
+    } else {
+      alert(
+        `Only ${stock} stock available for ${item.name}`
+      );
+    }
   };
 
   /* =====================================================
@@ -892,23 +921,61 @@ export default function Cart() {
                         Kg/Qty
                       </span>
 
-                      <input
-                        type="number"
-                        min={0}
-                        max={
-                          availableStock
-                        }
-                        value={
-                          item.quantity
-                        }
-                        onChange={(e) =>
-                          handleQuantityChange(
-                            item,
-                            e.target.value
-                          )
-                        }
-                        className="border px-2 py-1 w-20"
-                      />
+                      {/* QUANTITY CONTROL */}
+
+                      <div className="flex items-center border rounded overflow-hidden">
+
+                        {/* DECREASE */}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDecrease(
+                              item
+                            )
+                          }
+                          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-xl font-bold"
+                        >
+                          −
+                        </button>
+
+                        {/* INPUT */}
+
+                        <input
+                          type="number"
+                          min={0}
+                          max={
+                            availableStock
+                          }
+                          value={
+                            item.quantity
+                          }
+                          onChange={(e) =>
+                            handleQuantityChange(
+                              item,
+                              e.target.value
+                            )
+                          }
+                          className="border-x px-2 py-1 w-20 text-center outline-none"
+                        />
+
+                        {/* INCREASE */}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleIncrease(
+                              item
+                            )
+                          }
+                          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-xl font-bold"
+                        >
+                          +
+                        </button>
+
+                      </div>
+
+                      {/* REMOVE */}
 
                       <button
                         onClick={() =>
@@ -1272,8 +1339,6 @@ export default function Cart() {
               <div className="flex mt-2 justify-between">
 
                 <div className="flex-col gap-2">
-
-                 
 
                   <p className="text-sm font-bold text-gray-900">
                     0307-1038571
