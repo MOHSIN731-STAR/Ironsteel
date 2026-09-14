@@ -698,102 +698,138 @@ export default function WalkingOrdersPage() {
     availableItems,
     selectedItem,
   ]);
+// ================= COUNTING DATE FILTER =================
 
-  // ================= COUNTING DATE FILTER =================
+const countingFilteredOrders =
+  orders.filter((order) => {
+    const orderDate = new Date(
+      order.createdAt
+    );
 
-  const countingFilteredOrders =
-    orders.filter((order) => {
-      const orderDate = new Date(
-        order.createdAt
+    // =================================================
+    // FROM DATE + TO DATE SELECTED
+    // DATE RANGE WILL HAVE PRIORITY
+    // =================================================
+
+    if (fromDate || toDate) {
+      if (fromDate) {
+        const from = new Date(
+          `${fromDate}T00:00:00`
+        );
+
+        if (orderDate < from) {
+          return false;
+        }
+      }
+
+      if (toDate) {
+        const to = new Date(
+          `${toDate}T23:59:59.999`
+        );
+
+        if (orderDate > to) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    // =================================================
+    // IF NO FROM/TO DATE
+    // USE EXISTING DAILY / WEEKLY / MONTHLY
+    // =================================================
+
+    if (!countingDate) {
+      return true;
+    }
+
+    const selectedDate =
+      new Date(
+        `${countingDate}T00:00:00`
       );
 
-      const selectedDate =
-        new Date(
-          `${countingDate}T00:00:00`
-        );
+    // ================= DAILY =================
 
-      // ================= DAILY =================
+    if (
+      countingPeriod === 'day'
+    ) {
+      return (
+        orderDate.getFullYear() ===
+          selectedDate.getFullYear() &&
+        orderDate.getMonth() ===
+          selectedDate.getMonth() &&
+        orderDate.getDate() ===
+          selectedDate.getDate()
+      );
+    }
 
-      if (
-        countingPeriod === 'day'
-      ) {
-        return (
-          orderDate.getFullYear() ===
-            selectedDate.getFullYear() &&
-          orderDate.getMonth() ===
-            selectedDate.getMonth() &&
-          orderDate.getDate() ===
-            selectedDate.getDate()
-        );
-      }
+    // ================= WEEKLY =================
 
-      // ================= WEEKLY =================
+    if (
+      countingPeriod === 'weekly'
+    ) {
+      const startOfWeek =
+        new Date(selectedDate);
 
-      if (
-        countingPeriod === 'weekly'
-      ) {
-        const startOfWeek =
-          new Date(selectedDate);
+      const day =
+        startOfWeek.getDay();
 
-        const day =
-          startOfWeek.getDay();
+      const diff =
+        day === 0
+          ? -6
+          : 1 - day;
 
-        // Monday = first day
-        const diff =
-          day === 0
-            ? -6
-            : 1 - day;
+      startOfWeek.setDate(
+        startOfWeek.getDate() +
+          diff
+      );
 
-        startOfWeek.setDate(
-          startOfWeek.getDate() +
-            diff
-        );
+      startOfWeek.setHours(
+        0,
+        0,
+        0,
+        0
+      );
 
-        startOfWeek.setHours(
-          0,
-          0,
-          0,
-          0
-        );
+      const endOfWeek =
+        new Date(startOfWeek);
 
-        const endOfWeek =
-          new Date(startOfWeek);
+      endOfWeek.setDate(
+        endOfWeek.getDate() +
+          6
+      );
 
-        endOfWeek.setDate(
-          endOfWeek.getDate() +
-            6
-        );
+      endOfWeek.setHours(
+        23,
+        59,
+        59,
+        999
+      );
 
-        endOfWeek.setHours(
-          23,
-          59,
-          59,
-          999
-        );
+      return (
+        orderDate >=
+          startOfWeek &&
+        orderDate <=
+          endOfWeek
+      );
+    }
 
-        return (
-          orderDate >=
-            startOfWeek &&
-          orderDate <=
-            endOfWeek
-        );
-      }
+    // ================= MONTHLY =================
 
-      // ================= MONTHLY =================
+    if (
+      countingPeriod === 'monthly'
+    ) {
+      return (
+        orderDate.getFullYear() ===
+          selectedDate.getFullYear() &&
+        orderDate.getMonth() ===
+          selectedDate.getMonth()
+      );
+    }
 
-      if (
-        countingPeriod === 'monthly'
-      ) {
-        return (
-          orderDate.getFullYear() ===
-            selectedDate.getFullYear() &&
-          orderDate.getMonth() ===
-            selectedDate.getMonth()
-        );
-      }
-
-      return false;
-    });
+    return false;
+  });
 
   // ================= SELECTED ITEM COUNT =================
 
