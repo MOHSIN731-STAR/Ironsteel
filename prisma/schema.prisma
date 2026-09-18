@@ -79,6 +79,8 @@ model OrderItem {
   price    Float
   quantity Float
   total    Float
+ createdAt DateTime @default(now())
+
 }
 
 ////////////////////////////////////////////////////

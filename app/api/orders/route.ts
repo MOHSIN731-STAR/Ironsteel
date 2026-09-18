@@ -26,9 +26,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rawItems = Array.isArray(body.items)
-      ? body.items
-      : [];
+    const rawItems = Array.isArray(body.items) ? body.items : [];
 
     const items = rawItems.map((item: any) => {
       const price = Number(item.price) || 0;
@@ -39,31 +37,23 @@ export async function POST(req: NextRequest) {
         price,
         quantity,
         total: price * quantity,
+        // Current date add (agar frontend se aaye to use karo, warna abhi)
+        createdAt: item.createdAt
+          ? new Date(item.createdAt)
+          : new Date(),
       };
     });
 
     const calculatedTotal = items.reduce(
-      (sum: number, item: any) =>
-        sum + Number(item.total || 0),
+      (sum: number, item: any) => sum + Number(item.total || 0),
       0
     );
 
-    /*
-     * IMPORTANT:
-     *
-     * If frontend sends Items Calculated Total,
-     * preserve it.
-     *
-     * Otherwise use calculated item total.
-     */
-    const receivedItemsCalculatedTotal = Number(
-      body.itemsCalculatedTotal
-    );
+    const receivedItemsCalculatedTotal = Number(body.itemsCalculatedTotal);
 
-    const itemsCalculatedTotal =
-      Number.isFinite(receivedItemsCalculatedTotal)
-        ? receivedItemsCalculatedTotal
-        : calculatedTotal;
+    const itemsCalculatedTotal = Number.isFinite(receivedItemsCalculatedTotal)
+      ? receivedItemsCalculatedTotal
+      : calculatedTotal;
 
     const receivedTotal = Number(body.total);
 
@@ -74,11 +64,8 @@ export async function POST(req: NextRequest) {
     const order = await prisma.order.create({
       data: {
         customerName: body.customerName.trim(),
-
         total: grandTotal,
-
         itemsCalculatedTotal,
-
         ...(body.customer && {
           customer: {
             connect: {
@@ -86,12 +73,10 @@ export async function POST(req: NextRequest) {
             },
           },
         }),
-
         items: {
           create: items,
         },
       },
-
       include: {
         items: true,
         customer: true,
@@ -111,9 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message:
-          error?.message ||
-          "Failed to create order",
+        message: error?.message || "Failed to create order",
       },
       { status: 500 }
     );
@@ -130,7 +113,6 @@ export async function GET() {
       orderBy: {
         createdAt: "desc",
       },
-
       include: {
         items: true,
       },
@@ -225,30 +207,21 @@ export async function PUT(request: NextRequest) {
     if (Array.isArray(orderIds)) {
       groupOrderIds = orderIds
         .map((id: any) => Number(id))
-        .filter((id: number) =>
-          Number.isInteger(id)
-        );
+        .filter((id: number) => Number.isInteger(id));
     }
 
-    /*
-     * Primary order MUST always be included.
-     */
     if (!groupOrderIds.includes(primaryOrderId)) {
       groupOrderIds.push(primaryOrderId);
     }
 
-    groupOrderIds = [
-      ...new Set(groupOrderIds),
-    ];
+    groupOrderIds = [...new Set(groupOrderIds)];
 
     // ========================================================
     // VALUES
     // ========================================================
 
     const customerTotal = Number(total);
-
-    const editableItemsCalculatedTotal =
-      Number(itemsCalculatedTotal);
+    const editableItemsCalculatedTotal = Number(itemsCalculatedTotal);
 
     if (!Number.isFinite(customerTotal)) {
       return NextResponse.json(
@@ -260,218 +233,122 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (
-      !Number.isFinite(
-        editableItemsCalculatedTotal
-      )
-    ) {
+    if (!Number.isFinite(editableItemsCalculatedTotal)) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid Items Calculated Total",
+          message: "Invalid Items Calculated Total",
         },
         { status: 400 }
       );
     }
 
     // ========================================================
-    // CLEAN ITEMS
+    // CLEAN ITEMS (with createdAt preserve)
     // ========================================================
 
-    const cleanItems = items.map(
-      (item: any) => {
-        const price =
-          Number(item.price) || 0;
+    const cleanItems = items.map((item: any) => {
+      const price = Number(item.price) || 0;
+      const quantity = Number(item.quantity) || 0;
 
-        const quantity =
-          Number(item.quantity) || 0;
-
-        return {
-          name: String(
-            item.name || ""
-          ).trim(),
-
-          price,
-
-          quantity,
-
-          total:
-            price * quantity,
-        };
-      }
-    );
+      return {
+        name: String(item.name || "").trim(),
+        price,
+        quantity,
+        total: price * quantity,
+        // Original date rakho, warna current date
+        createdAt: item.createdAt
+          ? new Date(item.createdAt)
+          : new Date(),
+      };
+    });
 
     // ========================================================
     // TRANSACTION
-    //
-    // IMPORTANT:
-    //
-    // We merge ALL selected/grouped orders into ONE order.
-    //
-    // Example:
-    //
-    // Order 6 = 6 items
-    // Order 7 = 5 items
-    //
-    // Save:
-    //
-    // Order 6 = 11 items
-    // Order 7 = deleted
-    //
-    // This prevents duplicate totals.
     // ========================================================
 
-    const updatedOrder =
-      await prisma.$transaction(
-        async (tx) => {
-          // --------------------------------------------------
-          // Check primary order
-          // --------------------------------------------------
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      const existingPrimary = await tx.order.findUnique({
+        where: {
+          id: primaryOrderId,
+        },
+      });
 
-          const existingPrimary =
-            await tx.order.findUnique({
-              where: {
-                id: primaryOrderId,
-              },
-            });
+      if (!existingPrimary) {
+        throw new Error("Primary order not found");
+      }
 
-          if (!existingPrimary) {
-            throw new Error(
-              "Primary order not found"
-            );
-          }
+      // DELETE old items of primary order
+      await tx.orderItem.deleteMany({
+        where: {
+          orderId: primaryOrderId,
+        },
+      });
 
-          // --------------------------------------------------
-          // DELETE ITEMS FROM PRIMARY ORDER
-          // --------------------------------------------------
+      // CREATE new merged items (with original dates)
+      if (cleanItems.length > 0) {
+        await tx.orderItem.createMany({
+          data: cleanItems.map((item) => ({
+            orderId: primaryOrderId,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            total: item.total,
+            createdAt: item.createdAt, // ← date preserve
+          })),
+        });
+      }
 
-          await tx.orderItem.deleteMany({
-            where: {
-              orderId:
-                primaryOrderId,
-            },
-          });
+      // UPDATE primary order
+      const updated = await tx.order.update({
+        where: {
+          id: primaryOrderId,
+        },
+        data: {
+          customerName: customerName.trim(),
+          total: customerTotal,
+          itemsCalculatedTotal: editableItemsCalculatedTotal,
+        },
+      });
 
-          // --------------------------------------------------
-          // CREATE MERGED ITEMS
-          // --------------------------------------------------
-
-          if (cleanItems.length > 0) {
-            await tx.orderItem.createMany({
-              data: cleanItems.map(
-                (item) => ({
-                  orderId:
-                    primaryOrderId,
-
-                  name:
-                    item.name,
-
-                  price:
-                    item.price,
-
-                  quantity:
-                    item.quantity,
-
-                  total:
-                    item.total,
-                })
-              ),
-            });
-          }
-
-          // --------------------------------------------------
-          // UPDATE PRIMARY ORDER
-          // --------------------------------------------------
-
-          const updated =
-            await tx.order.update({
-              where: {
-                id: primaryOrderId,
-              },
-
-              data: {
-                customerName:
-                  customerName.trim(),
-
-                total:
-                  customerTotal,
-
-                /*
-                 * VERY IMPORTANT:
-                 *
-                 * Preserve user's current editable value.
-                 *
-                 * Do NOT recalculate this from items.
-                 */
-                itemsCalculatedTotal:
-                  editableItemsCalculatedTotal,
-              },
-            });
-
-          // --------------------------------------------------
-          // DELETE OTHER ORDERS FROM GROUP
-          // --------------------------------------------------
-
-          const otherOrderIds =
-            groupOrderIds.filter(
-              (id) =>
-                id !==
-                primaryOrderId
-            );
-
-          if (
-            otherOrderIds.length >
-            0
-          ) {
-            await tx.order.deleteMany({
-              where: {
-                id: {
-                  in: otherOrderIds,
-                },
-              },
-            });
-          }
-
-          // --------------------------------------------------
-          // GET FINAL ORDER
-          // --------------------------------------------------
-
-          return await tx.order.findUnique(
-            {
-              where: {
-                id: primaryOrderId,
-              },
-
-              include: {
-                items: true,
-              },
-            }
-          );
-        }
+      // DELETE other orders of the group
+      const otherOrderIds = groupOrderIds.filter(
+        (id) => id !== primaryOrderId
       );
+
+      if (otherOrderIds.length > 0) {
+        await tx.order.deleteMany({
+          where: {
+            id: {
+              in: otherOrderIds,
+            },
+          },
+        });
+      }
+
+      // Final order with items
+      return await tx.order.findUnique({
+        where: {
+          id: primaryOrderId,
+        },
+        include: {
+          items: true,
+        },
+      });
+    });
 
     return NextResponse.json({
       success: true,
-
-      message:
-        "Orders merged and updated successfully",
-
+      message: "Orders merged and updated successfully",
       order: updatedOrder,
     });
   } catch (error: any) {
-    console.error(
-      "PUT ORDER ERROR:",
-      error
-    );
+    console.error("PUT ORDER ERROR:", error);
 
     return NextResponse.json(
       {
         success: false,
-
-        message:
-          error?.message ||
-          "Failed to merge/update order",
+        message: error?.message || "Failed to merge/update order",
       },
       { status: 500 }
     );
@@ -482,22 +359,17 @@ export async function PUT(request: NextRequest) {
 // DELETE ORDER
 // ============================================================
 
-export async function DELETE(
-  request: NextRequest
-) {
+export async function DELETE(request: NextRequest) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const orderId =
-      Number(body.orderId);
+    const orderId = Number(body.orderId);
 
     if (!orderId) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Order ID is required",
+          message: "Order ID is required",
         },
         { status: 400 }
       );
@@ -511,21 +383,15 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message:
-        "Order deleted successfully",
+      message: "Order deleted successfully",
     });
   } catch (error: any) {
-    console.error(
-      "DELETE ORDER ERROR:",
-      error
-    );
+    console.error("DELETE ORDER ERROR:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          error?.message ||
-          "Failed to delete order",
+        message: error?.message || "Failed to delete order",
       },
       { status: 500 }
     );
