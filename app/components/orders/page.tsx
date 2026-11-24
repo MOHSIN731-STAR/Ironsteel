@@ -460,7 +460,25 @@ export default function OrdersPage() {
       }
     });
 
-    return Array.from(map.values());
+    const result = Array.from(map.values());
+
+    // ⭐ Latest item pehli row pe
+    result.forEach((group) => {
+      group.items.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA; // newest item first
+      });
+    });
+
+    // ⭐ New order (group) pehle show ho
+    result.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA; // newest group first
+    });
+
+    return result;
   }, [dateFilteredOrders]);
 
   // ==========================================================
